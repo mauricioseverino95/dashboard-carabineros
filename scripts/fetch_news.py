@@ -157,17 +157,39 @@ def youtube_feed(ch):
     return items
 
 
+PREFIERE = ["noticia", "en vivo", "24/7", "senal", "24 horas", "meganoticias", "chv", "t13", "teletrece"]
+EVITA = ["react", "golf", "maraton", "especial", "mejor de", "non stop", "masterchef", "partido", "futbol"]
+
+
+def _score(title):
+    t = norm(title)
+    return sum(2 for w in PREFIERE if w in t) - sum(5 for w in EVITA if w in t)
+
+
 def resolve_live(ch):
-    """Intenta obtener el videoId de la transmisión en vivo actual del canal."""
+    """Devuelve la lista de videos EN VIVO del canal, ordenada (el mejor primero)."""
+    found = []
     try:
-        page = fetch(f"https://www.youtube.com/channel/{ch['youtube']}/live", timeout=20).decode("utf-8", "ignore")
+        page = fetch(f"https://www.youtube.com/channel/{ch['youtube']}/streams", timeout=25).decode("utf-8", "ignore")
+        for m in re.finditer(r'"imageName":"LIVE"', page):
+            after = page[m.start():m.start() + 12000]
+            v = re.search(r'"videoId":"([\w-]{11})"', after)
+            t = re.search(r'"title":\{"content":"([^"]{0,120})', after) or re.search(r'"accessibilityText":"([^"]{0,120})', after)
+            if v and v.group(1) not in [x[0] for x in found]:
+                found.append((v.group(1), t.group(1) if t else ""))
     except Exception as e:  # noqa: BLE001
-        log("live", ch["clave"], "error", e)
-        return None
-    m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([\w-]{11})"', page)
-    if m and ('"isLiveNow":true' in page or '"isLive":true' in page or "hlsManifestUrl" in page):
-        return m.group(1)
-    return None
+        log("streams", ch["clave"], "error", e)
+    if not found:
+        try:
+            page = fetch(f"https://www.youtube.com/channel/{ch['youtube']}/live", timeout=20).decode("utf-8", "ignore")
+            m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([\w-]{11})"', page)
+            if m and '"isUpcoming":true' not in page:
+                found.append((m.group(1), ""))
+        except Exception as e:  # noqa: BLE001
+            log("live", ch["clave"], "error", e)
+    found.sort(key=lambda x: -_score(x[1]))
+    log("en vivo", ch["clave"], found)
+    return [v for v, _ in found]
 
 
 # ---------------------------------------------------------------- principal
@@ -261,7 +283,16 @@ def main():
     # --- Señales en vivo
     with ThreadPoolExecutor(5) as ex:
         lives = list(ex.map(resolve_live, channels))
-    live = {c["clave"]: {"videoId": v} for c, v in zip(channels, lives)}
+    try:
+        prev = json.loads((DATA / "live.json").read_text(encoding="utf-8")).get("channels", {})
+    except (OSError, ValueError):
+        prev = {}
+    live = {}
+    for c, vids in zip(channels, lives):
+        if vids:
+            live[c["clave"]] = {"videoId": vids[0], "alts": vids[1:5]}
+        else:  # si ahora no se pudo detectar, conservar lo último conocido
+            live[c["clave"]] = prev.get(c["clave"]) or {"videoId": None, "alts": []}
     log("en vivo:", {k: v["videoId"] for k, v in live.items()})
     write("live.json", {"updated": NOW.isoformat(), "channels": live})
     log(f"OK: {len(items)} noticias, {len(tv)} videos TV")
