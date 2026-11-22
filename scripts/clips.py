@@ -30,6 +30,7 @@ OBJETIVO_MB = 15              # tamaño objetivo por clip
 MAX_INTENTOS = 3
 NOW = dt.datetime.now(dt.timezone.utc)
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
+REQ_ID = os.environ.get("REQ_ID", "").strip()
 
 
 def log(*a):
@@ -114,7 +115,7 @@ def process(url, meta, max_dur):
             "duration": round(duration), "size": out.stat().st_size, "file": name,
             "download_url": f"https://github.com/{REPO}/releases/download/{TAG}/{name}",
             "thumb": meta.get("thumb") or info.get("thumbnail") or "",
-            "source_url": url, "created": NOW.isoformat(),
+            "source_url": url, "created": NOW.isoformat(), "request_id": REQ_ID if meta.get("manual") else "",
         }
 
 
@@ -129,7 +130,8 @@ def main():
     tv = {v["url"]: v for v in load("tv.json", {"items": []})["items"]}
     for u in manual:
         m = re.search(r"(?:v=|youtu\.be/|shorts/|live/)([\w-]{11})", u)
-        meta = next((v for v in tv.values() if m and v["videoId"] == m.group(1)), {})
+        meta = dict(next((v for v in tv.values() if m and v["videoId"] == m.group(1)), {}))
+        meta["manual"] = True
         queue.append((u, meta, MAX_DUR_MANUAL))
     if not manual:
         for v in tv.values():
@@ -155,7 +157,10 @@ def main():
         except Exception as e:  # noqa: BLE001
             key = meta.get("videoId") or url
             clips["failed"][key] = clips["failed"].get(key, 0) + 1
-            log("ERROR", url, str(e)[-300:])
+            msg = str(e)[-300:]
+            log("ERROR", url, msg)
+            if meta.get("manual") and REQ_ID:
+                clips.setdefault("errors", {})[REQ_ID] = ("YouTube bloqueó la descarga (requiere cookies)" if ("cookies" in msg or "Sign in" in msg) else msg[-160:])
         save("clips.json", clips | {"updated": NOW.isoformat()})
 
     # Limpiar clips antiguos

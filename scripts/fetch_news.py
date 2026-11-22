@@ -17,6 +17,7 @@ import json
 import re
 import sys
 import unicodedata
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -192,6 +193,50 @@ def resolve_live(ch):
     return [v for v, _ in found]
 
 
+
+# ---------------------------------------------------------------- cámaras
+CAM_BUSQUEDAS = ["santiago chile en vivo camara", "santiago de chile live cam", "camara en vivo santiago chile",
+                 "costanera center en vivo", "santiago en vivo webcam", "providencia en vivo camara"]
+CAM_INCLUYE = ["santiago", "costanera", "sanhattan", "providencia", "las condes", "vitacura", "nunoa",
+               "maipu", "valle nevado", "farellones", "la florida", "puente alto", "cerro san cristobal"]
+CAM_EXCLUYE = ["noticia", "teletrece", "t13", "meganoticias", "24 horas", "chv", "cnn", "musica para", "argentina"]
+
+
+def _js_unescape(t):
+    try:
+        return json.loads('"' + t + '"')
+    except ValueError:
+        return t
+
+
+def resolve_cams():
+    found = {}
+    for q in CAM_BUSQUEDAS:
+        try:
+            url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(q) + "&sp=EgJAAQ%253D%253D"
+            page = fetch(url, timeout=25).decode("utf-8", "ignore")
+        except Exception as e:  # noqa: BLE001
+            log("cams", q, "error", e)
+            continue
+        for m in re.finditer(r'"videoRenderer":\{"videoId":"([\w-]{11})"', page):
+            chunk = page[m.start():m.start() + 6000]
+            if not re.search(r'BADGE_STYLE_TYPE_LIVE_NOW|"style":"LIVE"', chunk):
+                continue
+            t = re.search(r'"title":\{"runs":\[\{"text":"([^"]{0,140})', chunk)
+            c = re.search(r'"ownerText":\{"runs":\[\{"text":"([^"]{0,60})', chunk)
+            title = t.group(1) if t else ""
+            nt = norm(title + " " + (c.group(1) if c else ""))
+            if not any(w in nt for w in CAM_INCLUYE) or any(w in nt for w in CAM_EXCLUYE):
+                continue
+            vid = m.group(1)
+            if vid not in found:
+                found[vid] = {"id": vid, "title": _js_unescape(title),
+                              "channel": c.group(1) if c else "", "hits": 0}
+            found[vid]["hits"] += 1
+    items = sorted(found.values(), key=lambda x: -x["hits"])
+    log("camaras:", [(i["id"], i["title"][:40]) for i in items])
+    return items
+
 # ---------------------------------------------------------------- principal
 def main():
     DATA.mkdir(exist_ok=True)
@@ -295,7 +340,15 @@ def main():
             live[c["clave"]] = prev.get(c["clave"]) or {"videoId": None, "alts": []}
     log("en vivo:", {k: v["videoId"] for k, v in live.items()})
     write("live.json", {"updated": NOW.isoformat(), "channels": live})
-    log(f"OK: {len(items)} noticias, {len(tv)} videos TV")
+    # --- Cámaras de Santiago
+    cams = resolve_cams()
+    if not cams:
+        try:
+            cams = json.loads((DATA / "camaras.json").read_text(encoding="utf-8")).get("items", [])
+        except (OSError, ValueError):
+            cams = []
+    write("camaras.json", {"updated": NOW.isoformat(), "items": cams[:12]})
+    log(f"OK: {len(items)} noticias, {len(tv)} videos TV, {len(cams)} camaras")
 
 
 def _safe(fn, *a):
