@@ -180,7 +180,7 @@ a { color: inherit; }
   .n-short { display: inline; }
 }
 @container (max-width: 300px) {
-  .tb-opt { display: none; }
+  .tb-opt, .src-badge { display: none; }
 }
 .tile.audio-on { border-color: var(--oro); }
 .tile-head {
@@ -199,13 +199,16 @@ a { color: inherit; }
 .tbtn.on { background: var(--oro); color: var(--verde-prof); }
 .tile-video { position: relative; aspect-ratio: 16 / 9; width: 100%; background: #000; }
 .tile.featured .tile-video { flex: 1; aspect-ratio: auto; min-height: 0; }
-.tile-video iframe, .tile-video > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.tile-video iframe, .tile-video video, .tile-video > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .tile-fallback {
   position: absolute; inset: 0; display: none; place-items: center; text-align: center;
   color: #fff; background: var(--verde-prof); padding: 16px; font-size: 14px;
 }
 .tile-fallback a { display: inline-block; margin-top: 10px; background: var(--oro); color: var(--verde-prof); padding: 6px 12px; border-radius: 6px; font-weight: 700; text-decoration: none; }
 .tile.failed .tile-fallback { display: grid; }
+.tile-video video { object-fit: contain; background: #000; }
+.src-badge:empty { display: none; }
+.src-badge { background: var(--oro); color: var(--verde-prof); border-radius: 4px; padding: 1px 5px; font: 700 10px var(--f-titulo); letter-spacing: .05em; white-space: nowrap; }
 
 /* Panel de pronóstico (sexta celda) */
 .forecast { background: var(--blanco); border-radius: var(--radio); box-shadow: var(--sombra); display: flex; flex-direction: column; overflow: hidden; }
