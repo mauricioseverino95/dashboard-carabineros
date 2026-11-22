@@ -2,7 +2,7 @@ name: Actualizar noticias
 
 on:
   schedule:
-    - cron: "*/15 * * * *"     # cada 15 minutos
+    - cron: "*/10 * * * *"     # cada 10 minutos
   workflow_dispatch:
 
 permissions:
