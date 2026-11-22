@@ -1,33 +1,77 @@
 name: Actualizar noticias
 
+# Actualiza noticias y mapa cada ~1 minuto y publica el sitio directamente.
+# Cada ejecución deja en cola la siguiente (empieza apenas termina la actual).
+# El cron de 5 minutos solo sirve de respaldo para reiniciar la cadena si se detiene.
 on:
-  schedule:
-    - cron: "*/10 * * * *"     # cada 10 minutos
   workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "*/5 * * * *"
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
 
 concurrency:
-  group: datos
+  group: noticias
   cancel-in-progress: false
 
 jobs:
-  noticias:
+  publicar:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Programar la siguiente actualización
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+          gh workflow run noticias.yml --repo "$GITHUB_REPOSITORY" --ref main || echo "No se pudo encolar (el cron la reiniciará)"
+
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Recolectar noticias, videos y señales en vivo
-        run: python scripts/fetch_news.py
-      - name: Guardar cambios
+
+      - name: Recuperar los últimos datos publicados
         run: |
-          git config user.name  "monitor-bot"
-          git config user.email "monitor-bot@users.noreply.github.com"
-          git add data/
-          git diff --cached --quiet && exit 0
-          git commit -m "Noticias $(TZ=America/Santiago date '+%d-%m %H:%M')"
-          for i in 1 2 3; do git pull --rebase -X theirs && git push && break; sleep 5; done
+          owner="${GITHUB_REPOSITORY_OWNER,,}"; repo="${GITHUB_REPOSITORY#*/}"
+          base="https://$owner.github.io/$repo/data"
+          for f in news mapa live camaras tv; do
+            if curl -fsSL --max-time 15 "$base/$f.json?t=$(date +%s%N)" -o "/tmp/$f.json" \
+               && python -c "import json,sys; json.load(open(sys.argv[1], encoding='utf-8'))" "/tmp/$f.json"; then
+              cp "/tmp/$f.json" "data/$f.json"; echo "ok $f"
+            else
+              echo "sin copia publicada de $f, se usa la del repositorio"
+            fi
+          done
+
+      - name: Recolectar noticias, mapa y señales
+        run: python scripts/fetch_news.py
+
+      - name: Preparar sitio
+        run: |
+          mkdir _site
+          cp -r index.html config.js css js assets data _site/
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Mantener un ritmo mínimo de 1 minuto
+        if: always()
+        run: |
+          resto=$(( 55 - ( $(date +%s) - INICIO ) ))
+          if [ "$resto" -gt 0 ]; then sleep "$resto"; fi
