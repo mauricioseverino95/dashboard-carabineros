@@ -9,6 +9,7 @@ on:
     branches: [main]
   schedule:
     - cron: "*/5 * * * *"
+    - cron: "2-59/5 * * * *"
 
 permissions:
   contents: read
@@ -26,7 +27,7 @@ jobs:
     timeout-minutes: 8
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy2.outputs.page_url }}
     steps:
       - name: Programar la siguiente actualización
         env:
@@ -68,6 +69,16 @@ jobs:
           path: _site
 
       - id: deploy
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      # Si GitHub falla al publicar (error transitorio de artefactos), reintentar una vez
+      - name: Esperar antes de reintentar
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 12
+
+      - id: deploy2
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
       - name: Mantener un ritmo mínimo de 1 minuto
