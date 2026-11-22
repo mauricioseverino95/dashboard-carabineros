@@ -1,0 +1,24 @@
+{
+  "_ayuda": "Fuentes de noticias. 'filtrar': true = solo se guardan notas que contengan alguna palabra clave. Puede agregar o quitar fuentes RSS.",
+  "palabras_clave": ["carabiner", "gope", "labocar", "os-9", "os9", "os-7", "os7", "comisaria", "subcomisaria", "fuerzas especiales", "general director"],
+  "rss": [
+    { "nombre": "Google Noticias", "tipo": "web", "filtrar": false, "agregador": true,
+      "url": "https://news.google.com/rss/search?q=carabineros+when:2d&hl=es-419&gl=CL&ceid=CL:es-419" },
+    { "nombre": "Google Noticias", "tipo": "web", "filtrar": false, "agregador": true,
+      "url": "https://news.google.com/rss/search?q=%22Carabineros+de+Chile%22&hl=es-419&gl=CL&ceid=CL:es-419" },
+    { "nombre": "Bing Noticias", "tipo": "web", "filtrar": false, "agregador": true,
+      "url": "https://www.bing.com/news/search?q=carabineros+chile&format=rss&mkt=es-CL" },
+    { "nombre": "La Tercera", "tipo": "web", "filtrar": true,
+      "url": "https://www.latercera.com/arc/outboundfeeds/rss/?outputType=xml" },
+    { "nombre": "El Mostrador", "tipo": "web", "filtrar": true, "url": "https://www.elmostrador.cl/feed/" },
+    { "nombre": "CIPER", "tipo": "web", "filtrar": true, "url": "https://www.ciperchile.cl/feed/" },
+    { "nombre": "Cooperativa", "tipo": "web", "filtrar": true,
+      "url": "https://www.cooperativa.cl/noticias/site/tax/port/all/rss_3___1.xml" },
+    { "nombre": "BioBioChile", "tipo": "web", "filtrar": true, "url": "https://www.biobiochile.cl/lista/categorias/nacional/feed" },
+    { "nombre": "Emol", "tipo": "web", "filtrar": true, "url": "https://www.emol.com/rss/rss.asp?canal=1" },
+    { "nombre": "The Clinic", "tipo": "web", "filtrar": true, "url": "https://www.theclinic.cl/feed/" },
+    { "nombre": "El Desconcierto", "tipo": "web", "filtrar": true, "url": "https://www.eldesconcierto.cl/feed" },
+    { "nombre": "Reddit r/chile", "tipo": "social", "filtrar": false,
+      "url": "https://www.reddit.com/r/chile/search.rss?q=carabineros&restrict_sr=1&sort=new" }
+  ]
+}
