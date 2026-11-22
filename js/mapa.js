@@ -16,8 +16,8 @@
     "Accidente de tránsito": "⚠", "Protesta / orden público": "✊", "Operativo policial": "★", "Información general": "●"
   };
   const CAPAS = {
-    tactico: { n: "Táctico", url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", a: "&copy; OpenStreetMap &copy; CARTO" },
-    calles: { n: "Calles", url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", a: "&copy; OpenStreetMap &copy; CARTO" },
+    tactico: { n: "Táctico", url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", et: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", a: "Mapa &copy; Esri, HERE, Garmin, &copy; OpenStreetMap", max: 16 },
+    calles: { n: "Calles", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", a: "Mapa &copy; Esri, HERE, Garmin, &copy; OpenStreetMap", max: 18 },
     satelite: { n: "Satélite", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", a: "Imágenes &copy; Esri" }
   };
 
@@ -104,10 +104,14 @@
     document.addEventListener("keydown", e => { if (e.key === "Escape" && !ov.hidden) cerrar(); });
   }
 
+  let etiquetas = null;
   function ponerCapa(k) {
     capaActual = k;
     if (capa) map.removeLayer(capa);
-    capa = L.tileLayer(CAPAS[k].url, { attribution: CAPAS[k].a, maxZoom: 18, subdomains: "abcd" }).addTo(map);
+    if (etiquetas) { map.removeLayer(etiquetas); etiquetas = null; }
+    const c = CAPAS[k];
+    capa = L.tileLayer(c.url, { attribution: c.a, maxZoom: 18, maxNativeZoom: c.max || 18 }).addTo(map);
+    if (c.et) etiquetas = L.tileLayer(c.et, { maxZoom: 18, maxNativeZoom: c.max || 18, pane: "overlayPane", opacity: .9 }).addTo(map);
     document.getElementById("mp-map").dataset.capa = k;
   }
 
