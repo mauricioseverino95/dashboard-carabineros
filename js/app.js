@@ -361,7 +361,7 @@
   async function initTV() {
     try { LIVE = (await getJSON("data/live.json")).channels || {}; } catch { }
     buildTV();
-    setInterval(() => refreshLinks(false), 10 * 60 * 1000);   // cada 10 minutos
+    setInterval(() => refreshLinks(false), 60 * 60 * 1000);   // cada 1 hora
   }
   initTV();
 
