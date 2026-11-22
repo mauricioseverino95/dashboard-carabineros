@@ -194,6 +194,151 @@ def resolve_live(ch):
 
 
 
+
+# ---------------------------------------------------------------- mapa
+LUG = json.loads((ROOT / "scripts" / "lugares.json").read_text(encoding="utf-8"))
+_COORD = {}
+for _n, _la, _lo, _r in LUG["comunas"]:
+    _COORD[norm(_n)] = (_n, _la, _lo, _r)
+_AMBIG = {norm(a) for a in LUG["ambiguas"]}
+_PATTERNS = []
+for key, val in list(_COORD.items()):
+    _PATTERNS.append((key, val))
+for a, target in LUG["alias"].items():
+    t = _COORD.get(norm(target))
+    if t:
+        _PATTERNS.append((norm(a), t))
+_PATTERNS.sort(key=lambda x: -len(x[0]))
+_CTX = r"(?:\ben|\bde|\bdesde|\bhacia|comuna de|sector de|ciudad de|region de)\s+"
+
+GRAVEDAD = [
+    (4, "Violencia grave", ["homicidio", "asesin", "muert", "muere", "fallec", "balead", "balacera", "baleo", "disparo",
+                            "tiroteo", "secuestr", "femicidio", "ataque armado", "emboscada", "acribill", "apunal",
+                            "cadaver", "sin vida", "martir", "victima fatal", "fatal", "tragedia"]),
+    (3, "Delito violento / emergencia", ["robo con violencia", "portonazo", "turbazo", "asalto", "encerrona", "incendio",
+                                         "persecucion", "narco", "droga", "arma", "explosiv", "agresion", "agredid", "herido",
+                                         "lesionad", "violencia", "amenaza", "atropell", "volcamiento", "derrumbe", "aluvion",
+                                         "tsunami", "sismo", "terremoto", "evacuacion", "toma de", "detonacion"]),
+    (2, "Procedimiento policial", ["detenid", "detien", "detuv", "aprehend", "detencion", "operativo", "allanamiento", "fiscalizacion", "control", "incaut",
+                                   "decomis", "accidente", "choque", "colision", "desalojo", "manifestacion", "protesta",
+                                   "barricada", "robo", "hurto", "estafa", "infraccion", "denuncia", "formalizad", "prision preventiva"]),
+]
+CATEGORIAS = [("Homicidio / armas", ["homicidio", "asesin", "balead", "balacera", "disparo", "tiroteo", "arma", "femicidio", "baleo"]),
+              ("Robo / asalto", ["robo", "portonazo", "turbazo", "asalto", "encerrona", "hurto", "estafa"]),
+              ("Drogas", ["droga", "narco", "cocaina", "marihuana", "pasta base"]),
+              ("Incendio / emergencia", ["incendio", "sismo", "terremoto", "aluvion", "evacuacion", "temporal", "derrumbe", "tsunami"]),
+              ("Accidente de tránsito", ["accidente", "choque", "colision", "atropell", "volcamiento"]),
+              ("Protesta / orden público", ["protesta", "manifestacion", "barricada", "desorden", "toma de"]),
+              ("Operativo policial", ["operativo", "detenid", "detien", "detuv", "allanamiento", "fiscalizacion", "control", "incaut", "decomis"])]
+
+
+def gravedad(text):
+    t = norm(text)
+    for nivel, _, words in GRAVEDAD:
+        if any(w in t for w in words):
+            return nivel
+    return 1
+
+
+def categoria(text):
+    t = norm(text)
+    for nombre, words in CATEGORIAS:
+        if any(w in t for w in words):
+            return nombre
+    return "Información general"
+
+
+def ubicar(title, summary, source, region_hint=None):
+    """Busca la comuna/región mencionada. Devuelve (lugar, lat, lon, precision) o None."""
+    for texto, prec in ((title, "comuna"), (summary, "comuna"), (source, "fuente")):
+        t = " " + norm(texto or "") + " "
+        if len(t) < 4:
+            continue
+        mejor = None
+        for key, val in _PATTERNS:
+            if key in _AMBIG or len(key) <= 3:
+                m = re.search(_CTX + re.escape(key) + r"\b", t)
+            else:
+                m = re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", t)
+            if m and (mejor is None or m.start() < mejor[0]):
+                mejor = (m.start(), val)
+        if mejor:
+            n, la, lo, _ = mejor[1]
+            return n, la, lo, prec
+    if region_hint:
+        v = _COORD.get(norm(region_hint))
+        if v:
+            return v[0], v[1], v[2], "region"
+    return None
+
+
+def _jitter(id_, lat, lon, prec):
+    h = int(hashlib.md5(id_.encode()).hexdigest()[:8], 16)
+    r = 0.004 if prec == "comuna" else 0.03
+    return round(lat + ((h % 1000) / 1000 - .5) * r * 2, 5), round(lon + (((h // 1000) % 1000) / 1000 - .5) * r * 2, 5)
+
+
+REGION_QUERIES = ["Arica", "Iquique", "Antofagasta", "Copiapó", "La Serena", "Valparaíso", "Santiago", "Rancagua", "Talca",
+                  "Chillán", "Concepción", "Temuco", "Valdivia", "Puerto Montt", "Coyhaique", "Punta Arenas"]
+
+
+def build_map(rss_results, news_items, keywords):
+    """Arma data/mapa.json con todas las noticias de Chile ubicables."""
+    pts = {}
+
+    def put(title, summary, url, source, published, region_hint=None, carab=None):
+        if not title or not url:
+            return
+        if published:
+            try:
+                if (NOW - dt.datetime.fromisoformat(published)).total_seconds() > 72 * 3600:
+                    return
+            except ValueError:
+                pass
+        iid = item_id(title)
+        if iid in pts:
+            return
+        g = ubicar(title, summary, source, region_hint)
+        if not g:
+            return
+        lugar, la, lo, prec = g
+        la, lo = _jitter(iid, la, lo, prec)
+        txt = title + " " + (summary or "")
+        pts[iid] = {"id": iid, "title": title, "summary": (summary or "")[:220], "url": url, "source": source,
+                    "published": published, "lat": la, "lon": lo, "lugar": lugar, "precision": prec,
+                    "gravedad": gravedad(txt), "categoria": categoria(txt),
+                    "carab": bool(carab if carab is not None else matches(txt, keywords))}
+
+    for it in news_items:
+        put(it["title"], it.get("summary"), it["url"], it.get("source"), it.get("published"), carab=True)
+    for src, entries in rss_results:
+        for e in entries:
+            title, source = e["title"], e["source"] or src["nombre"]
+            if src.get("agregador") and " - " in title:
+                title, _, tail = title.rpartition(" - ")
+                source = e["source"] or tail
+            summary = clean(e["summary"], 280)
+            if norm(summary).startswith(norm(title)[:40]):
+                summary = ""
+            put(title, summary, e["link"], source, e["date"].isoformat() if e["date"] else None,
+                region_hint=src.get("region"))
+    items = sorted(pts.values(), key=lambda x: x["published"] or "", reverse=True)[:700]
+    try:
+        old = json.loads((DATA / "mapa.json").read_text(encoding="utf-8")).get("items", [])
+        ids = {i["id"] for i in items}
+        for o in old:
+            if o["id"] not in ids and o.get("published"):
+                try:
+                    if (NOW - dt.datetime.fromisoformat(o["published"])).total_seconds() <= 72 * 3600:
+                        items.append(o)
+                except ValueError:
+                    pass
+        items = sorted(items, key=lambda x: x["published"] or "", reverse=True)[:900]
+    except (OSError, ValueError):
+        pass
+    write("mapa.json", {"updated": NOW.isoformat(), "items": items})
+    log(f"mapa: {len(items)} puntos")
+
 # ---------------------------------------------------------------- cámaras
 CAM_BUSQUEDAS = ["santiago chile en vivo camara", "santiago de chile live cam", "camara en vivo santiago chile",
                  "costanera center en vivo", "santiago en vivo webcam", "providencia en vivo camara"]
@@ -274,6 +419,15 @@ def main():
 
     with ThreadPoolExecutor(8) as ex:
         results = list(ex.map(get_rss, conf.get("rss", [])))
+    # Fuentes extra solo para el mapa (todas las noticias de Chile, por región)
+    extra = [{"nombre": "Google Noticias", "tipo": "web", "agregador": True, "region": r,
+              "url": "https://news.google.com/rss/search?q=" + urllib.parse.quote('"' + r + '" when:1d') + "&hl=es-419&gl=CL&ceid=CL:es-419"}
+             for r in REGION_QUERIES]
+    extra += [{"nombre": "Google Noticias", "tipo": "web", "agregador": True,
+               "url": "https://news.google.com/rss/search?q=" + urllib.parse.quote(q) + "&hl=es-419&gl=CL&ceid=CL:es-419"}
+              for q in ["Chile policial when:1d", "PDI OR fiscalía Chile when:1d", "incendio OR accidente Chile when:1d", "Chile noticias when:1d"]]
+    with ThreadPoolExecutor(8) as ex:
+        map_results = list(ex.map(get_rss, extra))
 
     for src, entries in results:
         n = 0
@@ -323,6 +477,10 @@ def main():
 
     items = sorted(collected.values(), key=lambda x: x["published"] or "", reverse=True)[:MAX_ITEMS]
     write("news.json", {"updated": NOW.isoformat(), "items": items})
+    try:
+        build_map(results + map_results, items, keywords)
+    except Exception as e:  # noqa: BLE001
+        log("mapa error", e)
     write("tv.json", {"updated": NOW.isoformat(), "items": tv[:120]})
 
     # --- Señales en vivo
