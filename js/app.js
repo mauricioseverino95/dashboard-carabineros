@@ -486,9 +486,18 @@
     try { dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
   }
   $("#dl-config").addEventListener("click", () => abrirConfig());
-  dlg.addEventListener("close", () => {
-    if (dlg.returnValue === "ok") { store.set("dash.ghtoken", $("#dl-token").value.trim()); toast("Descargas activadas en este equipo."); }
-    if (dlg.returnValue === "borrar") { store.set("dash.ghtoken", ""); toast("Token eliminado de este equipo."); }
+  dlg.addEventListener("close", async () => {
+    if (dlg.returnValue === "borrar") { store.set("dash.ghtoken", ""); toast("Token eliminado de este equipo."); return; }
+    if (dlg.returnValue !== "ok") return;
+    const raw = $("#dl-token").value;
+    const m = raw.match(/(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,})/);
+    if (!m) { toast("Eso no es un token: debe empezar con github_pat_. Copie el código con el ícono de copiar en GitHub."); return; }
+    store.set("dash.ghtoken", m[1]);
+    try {
+      const r = await gh("");
+      const ok = r.ok && (await gh("/actions/workflows/clips.yml")).ok;
+      toast(ok ? "✅ Token válido. Descargas activadas en este equipo." : "⚠ GitHub rechazó el token (" + r.status + "). Revise que tenga acceso al repositorio y permiso Actions: lectura y escritura.");
+    } catch { toast("Token guardado. No se pudo comprobar con GitHub (sin conexión)."); }
   });
 
   async function gh(path, opts = {}) {
