@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-22T18:11:29.420726+00:00",
+ "updated": "2026-11-22T21:26:12.242797+00:00",
  "channels": {
   "c13": {
    "videoId": "h5efji0_wtQ",
@@ -10,20 +10,16 @@
    ]
   },
   "tvn": {
-   "videoId": "2NzWubSkJew",
-   "alts": [
-    "tdrXQJgDVmw"
-   ]
+   "videoId": "tdrXQJgDVmw",
+   "alts": []
   },
   "mega": {
    "videoId": "mmTgV_ytVCw",
    "alts": []
   },
   "24h": {
-   "videoId": "RD4OtGzRbjQ",
-   "alts": [
-    "TrqtbBJQ_yU"
-   ]
+   "videoId": "TrqtbBJQ_yU",
+   "alts": []
   },
   "chv": {
    "videoId": "9hAYY_22Kog",
