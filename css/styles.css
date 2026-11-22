@@ -44,7 +44,7 @@ a { color: inherit; }
   border-bottom: 4px solid var(--oro);
 }
 .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.logo { height: 56px; width: auto; flex: none; }
+.logo { height: 74px; width: auto; flex: none; }
 .logo-ph {
   width: 56px; height: 56px; border-radius: 50%;
   border: 2px dashed var(--oro); color: var(--oro);
