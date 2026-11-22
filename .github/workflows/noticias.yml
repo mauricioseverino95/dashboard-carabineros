@@ -73,5 +73,5 @@ jobs:
       - name: Mantener un ritmo mínimo de 1 minuto
         if: always()
         run: |
-          resto=$(( 55 - ( $(date +%s) - INICIO ) ))
+          resto=$(( 38 - ( $(date +%s) - INICIO ) ))
           if [ "$resto" -gt 0 ]; then sleep "$resto"; fi
