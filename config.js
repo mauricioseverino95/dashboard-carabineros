@@ -55,5 +55,11 @@ window.DASH_CONFIG = {
   ],
 
   // Cada cuántos segundos se recargan noticias y descargas en pantalla
-  recargaSegundos: 60
+  recargaSegundos: 60,
+
+  // Radio Carabineros de Chile (banner inferior). Si hay más de una URL,
+  // se usa la siguiente cuando la primera se cae.
+  radio: {
+    fuentes: ["https://streaming.prositel.cl/8374/stream"]
+  }
 };
