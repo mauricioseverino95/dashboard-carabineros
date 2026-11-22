@@ -1,6 +1,39 @@
 {
- "updated": "2026-11-22T17:28:58.582257+00:00",
+ "updated": "2026-11-22T18:11:29.420726+00:00",
  "items": [
+  {
+   "videoId": "re-xjEkLfV8",
+   "title": "Falsos repartidores y bandas organizadas: Dónde y cómo operan los motochorros en puntos críticos",
+   "url": "https://www.youtube.com/watch?v=re-xjEkLfV8",
+   "channel": "CHV Noticias",
+   "channelKey": "chv",
+   "published": "2026-11-22T18:00:35+00:00",
+   "thumb": "https://i.ytimg.com/vi/re-xjEkLfV8/mqdefault.jpg",
+   "description": "Con mochilas de aplicaciones de delivery como fachada para pasar inadvertidos, los motochorros operan en redes organizadas no solo para arrebatar celulares en segundos, sino también para vaciar cuentas bancarias mediante la extracción de datos. Sectores de…",
+   "relevant": false
+  },
+  {
+   "videoId": "DpV6xJy-BD4",
+   "title": "Marejadas provocaron desborde de estero en Laguna Verde",
+   "url": "https://www.youtube.com/watch?v=DpV6xJy-BD4",
+   "channel": "24 Horas · TVN",
+   "channelKey": "24h",
+   "published": "2026-11-22T17:29:55+00:00",
+   "thumb": "https://i.ytimg.com/vi/DpV6xJy-BD4/mqdefault.jpg",
+   "description": "En la región de Valparaíso, las marejadas han provocado el desborde del estero El Sauce, lo que mantiene inundaciones para vecinos en Laguna Verde",
+   "relevant": false
+  },
+  {
+   "videoId": "lOA2VcoEESw",
+   "title": "Gael Yeomans por Caso Firmas: \"Las responsabilidades son personales\"",
+   "url": "https://www.youtube.com/watch?v=lOA2VcoEESw",
+   "channel": "24 Horas · TVN",
+   "channelKey": "24h",
+   "published": "2026-11-22T17:26:49+00:00",
+   "thumb": "https://i.ytimg.com/vi/lOA2VcoEESw/mqdefault.jpg",
+   "description": "La diputada y presidenta del Frente Amplio abordó el Caso Firmas, hecho que mantiene plena investigación vigente.",
+   "relevant": false
+  },
   {
    "videoId": "UrpPxzNcrYQ",
    "title": "Enterraron medio millón de pesos en la playa",
@@ -629,17 +662,6 @@
    "relevant": false
   },
   {
-   "videoId": "0_Sqy6bYARI",
-   "title": "Nacer tantas veces: el nuevo retrato sobre la vida y obra de Nemesio Antúnez | Página 24",
-   "url": "https://www.youtube.com/watch?v=0_Sqy6bYARI",
-   "channel": "24 Horas · TVN",
-   "channelKey": "24h",
-   "published": "2026-11-22T12:00:10+00:00",
-   "thumb": "https://i.ytimg.com/vi/0_Sqy6bYARI/mqdefault.jpg",
-   "description": "Tras tres años de investigación, el escritor Felipe Reyes presenta \"Nacer tantas veces\", una biografía que recorre la trayectoria del pintor y gestor cultural Nemesio Antúnez. La obra repasa desde su paso por la arquitectura, su exilio en Barcelona y su…",
-   "relevant": false
-  },
-  {
    "videoId": "pCZ3Ma23XF4",
    "title": "¡Se fue de cara al piso!",
    "url": "https://www.youtube.com/watch?v=pCZ3Ma23XF4",
@@ -648,17 +670,6 @@
    "published": "2026-11-22T03:16:04+00:00",
    "thumb": "https://i.ytimg.com/vi/pCZ3Ma23XF4/mqdefault.jpg",
    "description": "¡Se robó todas las miradas! 🏃‍♂️ Durante el EtM Day 2026, distintos corpóreos protagonizaron una frenética competencia. Pero como no todo puede ser color de rosas, hubo un participante que tuvo una inesperada caída: el representante de San José. 👏 Pese al…",
-   "relevant": false
-  },
-  {
-   "videoId": "6FQyr0zdsaY",
-   "title": "24 Horas Al Día - sábado 21 de noviembre 2026",
-   "url": "https://www.youtube.com/watch?v=6FQyr0zdsaY",
-   "channel": "24 Horas · TVN",
-   "channelKey": "24h",
-   "published": "2026-11-22T01:12:06+00:00",
-   "thumb": "https://i.ytimg.com/vi/6FQyr0zdsaY/mqdefault.jpg",
-   "description": "Revisa las principales informaciones de la jornada en 24 Horas Al Día junto a Juan Carlos Alarcón.",
    "relevant": false
   },
   {
@@ -725,17 +736,6 @@
    "published": "2026-11-21T22:00:26+00:00",
    "thumb": "https://i.ytimg.com/vi/SjgsgaL-9y4/mqdefault.jpg",
    "description": "Hace un año, cinco turistas extranjeros murieron cuando intentaban completar el circuito O en Torres del Paine, lo que generó cuestionamiento sobre la seguridad en ese sector turístico. Entre las críticas en ese momento estuvieron la falta de pronósticos…",
-   "relevant": false
-  },
-  {
-   "videoId": "KqR9lzBDBds",
-   "title": "Denuncian a jóvenes que hacen \"EQUILIBRIO\" en pasarela de Ñuñoa: No se pueden instalar rejas - CHV",
-   "url": "https://www.youtube.com/watch?v=KqR9lzBDBds",
-   "channel": "CHV Noticias",
-   "channelKey": "chv",
-   "published": "2026-11-21T21:00:32+00:00",
-   "thumb": "https://i.ytimg.com/vi/KqR9lzBDBds/mqdefault.jpg",
-   "description": "Registros enviados a Cazanoticias encendieron las alertas en la comuna de Ñuñoa, específicamente en el sector de Villa Frei y el Parque Juan XXIII, luego de que vecinos captaran a sujetos realizando arriesgadas maniobras de equilibrio sobre la estrecha…",
    "relevant": false
   },
   {
