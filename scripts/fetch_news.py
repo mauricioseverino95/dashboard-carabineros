@@ -14,6 +14,7 @@ import email.utils
 import hashlib
 import html
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -483,7 +484,10 @@ def main():
         log("mapa error", e)
     write("tv.json", {"updated": NOW.isoformat(), "items": tv[:120]})
 
-    # --- Señales en vivo
+    # --- Señales en vivo y cámaras: cada ~10 min (las noticias y el mapa, cada minuto)
+    if _edad_min("live.json") < 9 and not os.environ.get("FORZAR_VIVO"):
+        log(f"OK: {len(items)} noticias, {len(tv)} videos TV (señales en vivo sin cambios)")
+        return
     with ThreadPoolExecutor(5) as ex:
         lives = list(ex.map(resolve_live, channels))
     try:
@@ -507,6 +511,14 @@ def main():
             cams = []
     write("camaras.json", {"updated": NOW.isoformat(), "items": cams[:12]})
     log(f"OK: {len(items)} noticias, {len(tv)} videos TV, {len(cams)} camaras")
+
+
+def _edad_min(name):
+    try:
+        u = json.loads((DATA / name).read_text(encoding="utf-8"))["updated"]
+        return (NOW - dt.datetime.fromisoformat(u)).total_seconds() / 60
+    except (OSError, ValueError, KeyError, TypeError):
+        return 999
 
 
 def _safe(fn, *a):
