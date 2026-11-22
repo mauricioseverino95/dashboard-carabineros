@@ -1,20 +1,34 @@
 {
- "updated": "2026-11-22T17:00:07.966832+00:00",
+ "updated": "2026-11-22T17:40:00+00:00",
  "channels": {
   "c13": {
-   "videoId": null
+   "videoId": "h5efji0_wtQ",
+   "alts": [
+    "2EKRRiUwefc",
+    "q4yzfuNKsBg"
+   ]
   },
   "tvn": {
-   "videoId": null
+   "videoId": "2NzWubSkJew",
+   "alts": [
+    "tdrXQJgDVmw"
+   ]
   },
   "mega": {
-   "videoId": null
+   "videoId": "mmTgV_ytVCw",
+   "alts": []
   },
   "24h": {
-   "videoId": null
+   "videoId": "RD4OtGzRbjQ",
+   "alts": [
+    "TrqtbBJQ_yU"
+   ]
   },
   "chv": {
-   "videoId": null
+   "videoId": "8O0bTMfFpKo",
+   "alts": [
+    "9hAYY_22Kog"
+   ]
   }
  }
 }
