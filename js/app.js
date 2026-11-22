@@ -387,29 +387,94 @@
 
   const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+  // ---- Rotación en vivo: cada pocos segundos entra una noticia por arriba.
+  // Primero las realmente nuevas (marca NUEVA); si no hay, vuelve a subir una ya publicada
+  // (marca ↻) para que la columna siempre se mueva. La hora mostrada es siempre la real.
+  const ROTAR_MS = (CFG.rotacionSegundos || 7) * 1000;
+  let feed = [];                 // orden mostrado (ids)
+  const porId = new Map();       // id -> noticia
+  const ultimaSubida = new Map();// id -> momento en que subió por última vez
+  let pendientes = [];           // nuevas aún no mostradas
+  let pausaHasta = 0;
+
+  const filtrando = () => newsFilter !== "todas" || !!newsQuery;
+
+  function itemLi(n, marca) {
+    const li = el("li", { class: "news-item" + (seen.has(n.id) ? "" : " is-new"), "data-id": n.id },
+      el("div", { class: "news-meta" },
+        el("span", { class: "kind kind-" + n.kind, text: KINDS[n.kind] || n.kind }),
+        el("span", { class: "src", text: n.source || "" }),
+        marca === "nueva" ? el("span", { class: "nw-tag nw-nueva", text: "Nueva" }) :
+        marca === "rep" ? el("span", { class: "nw-tag nw-rep", title: "Noticia vuelta a destacar", text: "↻" }) : null,
+        el("time", { datetime: n.published || "", title: n.published ? fCorta.format(new Date(n.published)) : "", text: hace(n.published) })
+      ),
+      el("h3", {}, el("a", { href: n.url, target: "_blank", rel: "noopener", text: n.title })),
+      n.summary ? el("p", { text: n.summary }) : null
+    );
+    return li;
+  }
+
   function renderNews() {
     const list = $("#news-list");
     const q = norm(newsQuery);
-    const items = news.filter(n =>
+    const base = filtrando() ? news : feed.map(id => porId.get(id)).filter(Boolean);
+    const items = base.filter(n =>
       (newsFilter === "todas" || n.kind === newsFilter) &&
       (!q || norm(n.title + " " + n.summary + " " + n.source).includes(q)));
     $("#news-count").textContent = items.length;
     list.innerHTML = "";
-    if (!items.length) { list.append(el("li", { class: "empty", text: news.length ? "Sin resultados para este filtro." : "Aún no hay noticias. Se actualizan cada 15 minutos." })); return; }
+    list.classList.toggle("rotando", !filtrando());
+    if (!items.length) { list.append(el("li", { class: "empty", text: news.length ? "Sin resultados para este filtro." : "Aún no hay noticias. Se actualizan cada minuto." })); return; }
     const frag = document.createDocumentFragment();
-    items.slice(0, 300).forEach(n => {
-      frag.append(el("li", { class: "news-item" + (seen.has(n.id) ? "" : " is-new") },
-        el("div", { class: "news-meta" },
-          el("span", { class: "kind kind-" + n.kind, text: KINDS[n.kind] || n.kind }),
-          el("span", { class: "src", text: n.source || "" }),
-          el("time", { datetime: n.published || "", title: n.published ? fCorta.format(new Date(n.published)) : "", text: hace(n.published) })
-        ),
-        el("h3", {}, el("a", { href: n.url, target: "_blank", rel: "noopener", text: n.title })),
-        n.summary ? el("p", { text: n.summary }) : null
-      ));
-    });
+    items.slice(0, 300).forEach(n => frag.append(itemLi(n)));
     list.append(frag);
   }
+
+  function subir(id, marca) {
+    const n = porId.get(id); if (!n) return;
+    feed = [id, ...feed.filter(x => x !== id)].slice(0, 300);
+    ultimaSubida.set(id, Date.now());
+    if (filtrando()) return;
+    const list = $("#news-list");
+    const viejo = list.querySelector(`li[data-id="${CSS.escape(id)}"]`);
+    const antesScroll = list.scrollTop;
+    if (viejo) viejo.remove();
+    list.querySelector(".empty")?.remove();
+    const li = itemLi(n, marca);
+    li.classList.add("entra");
+    list.prepend(li);
+    while (list.children.length > 300) list.lastElementChild.remove();
+    // si el usuario está leyendo más abajo, no mover lo que está mirando
+    if (antesScroll > 4) list.scrollTop = antesScroll + li.offsetHeight;
+    $("#news-count").textContent = list.querySelectorAll(".news-item").length;
+    setTimeout(() => li.classList.remove("entra"), 1600);
+  }
+
+  function rotar() {
+    if (document.hidden || filtrando() || Date.now() < pausaHasta || !feed.length) return;
+    if (pendientes.length) { subir(pendientes.shift(), "nueva"); return; }
+    // repetir: la noticia que hace más tiempo no sube, fuera de las 8 de arriba
+    const candidatas = feed.slice(8, 120);
+    if (!candidatas.length) return;
+    let elegida = candidatas[0], menor = Infinity;
+    for (const id of candidatas) {
+      const t = ultimaSubida.get(id) || 0;
+      if (t < menor) { menor = t; elegida = id; }
+    }
+    subir(elegida, "rep");
+  }
+  setInterval(rotar, ROTAR_MS);
+  // pausa mientras se lee (cursor encima o toque) para que nada se mueva bajo el mouse
+  const listaNews = $("#news-list");
+  listaNews.addEventListener("mouseenter", () => { pausaHasta = Infinity; });
+  listaNews.addEventListener("mouseleave", () => { pausaHasta = Date.now() + 2000; });
+  listaNews.addEventListener("touchstart", () => { pausaHasta = Date.now() + 20000; }, { passive: true });
+  // refrescar el "hace X min" de cada noticia
+  setInterval(() => {
+    listaNews.querySelectorAll(".news-item").forEach(li => {
+      const t = li.querySelector("time"); if (t && t.dateTime) t.textContent = hace(t.dateTime);
+    });
+  }, 60000);
 
   function renderTicker() {
     const move = $("#ticker-move");
@@ -429,8 +494,22 @@
       const d = await getJSON("data/news.json");
       news = d.items || [];
       lastUpdate = d.updated;
+      const primera = !feed.length;
+      news.forEach(n => porId.set(n.id, n));
+      const vigentes = new Set(news.map(n => n.id));
+      if (primera) {
+        feed = news.map(n => n.id).slice(0, 300);
+      } else {
+        feed = feed.filter(id => vigentes.has(id));
+        // nuevas: entran de a una (la más antigua primero, así la más reciente queda arriba)
+        const enFeed = new Set([...feed, ...pendientes]);
+        const nuevas = news.filter(n => !enFeed.has(n.id)).reverse().map(n => n.id);
+        pendientes = [...pendientes.filter(id => vigentes.has(id)), ...nuevas].slice(-60);
+      }
+      for (const id of porId.keys()) if (!vigentes.has(id)) porId.delete(id);
       $("#news-updated").textContent = d.updated ? "act. " + hace(d.updated) : "";
-      renderNews(); renderTicker();
+      if (primera || filtrando()) renderNews();
+      renderTicker();
       // marcar como vistas para la próxima carga
       setTimeout(() => { news.forEach(n => seen.add(n.id)); store.set("dash.seen", [...seen].slice(-1500)); }, 15000);
       status();
