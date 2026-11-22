@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Centro de Monitoreo de Medios · Carabineros de Chile</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="assets/logo-carabineros.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="logo" src="assets/logo-carabineros.png" alt="Logo Carabineros de Chile"
+           onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'logo logo-ph',textContent:'LOGO'}))">
+      <div class="brand-text">
+        <h1 id="titulo">Centro de Monitoreo de Medios</h1>
+        <p id="subtitulo">Carabineros de Chile</p>
+      </div>
+      <img class="logo logo-2" src="assets/logo-secundario.png" alt="" onerror="this.remove()">
+    </div>
+
+    <div class="clock" aria-live="off">
+      <div class="clock-time" id="hora">--:--:--</div>
+      <div class="clock-date" id="fecha">Santiago de Chile</div>
+    </div>
+
+    <div class="weather" id="clima">
+      <div class="w-icon" id="w-icon">·</div>
+      <div class="w-main">
+        <div class="w-temp" id="w-temp">--°</div>
+        <div class="w-desc" id="w-desc">Cargando clima…</div>
+      </div>
+      <div class="w-extra" id="w-extra"></div>
+    </div>
+  </header>
+
+  <div class="ticker" id="ticker"><span class="ticker-label">ÚLTIMO</span><div class="ticker-track"><div class="ticker-move" id="ticker-move">Cargando titulares…</div></div></div>
+
+  <main class="layout">
+    <!-- COLUMNA NOTICIAS -->
+    <section class="col col-news" aria-label="Noticias">
+      <div class="col-head">
+        <h2>Noticias</h2>
+        <span class="badge" id="news-count">0</span>
+        <span class="updated" id="news-updated"></span>
+      </div>
+      <div class="filters">
+        <input type="search" id="news-search" placeholder="Buscar en noticias…" aria-label="Buscar noticias">
+        <div class="chips" id="news-chips"></div>
+      </div>
+      <div class="social" id="social"></div>
+      <ul class="news-list" id="news-list"><li class="empty">Cargando noticias…</li></ul>
+    </section>
+
+    <!-- CANALES EN VIVO -->
+    <section class="tv" aria-label="Canales en vivo">
+      <div class="tv-grid" id="tv-grid"></div>
+    </section>
+
+    <!-- COLUMNA DESCARGAS -->
+    <section class="col col-dl" aria-label="Descargas">
+      <div class="col-head">
+        <h2>Descargas TV</h2>
+        <span class="badge" id="dl-count">0</span>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="listos" role="tab">Listos para WhatsApp</button>
+        <button class="tab" data-tab="todo" role="tab">Todo lo emitido</button>
+      </div>
+      <ul class="dl-list" id="dl-list"><li class="empty">Cargando…</li></ul>
+      <p class="dl-note">Videos comprimidos en MP4 (480p) para enviar por WhatsApp. Se generan automáticamente cuando un canal publica una nota sobre Carabineros.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Uso interno · Monitoreo de prensa</span>
+    <span id="foot-status">Conectando…</span>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
