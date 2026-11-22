@@ -21,7 +21,7 @@
   };
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } }
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }
   };
   function toast(msg) {
     const t = el("div", { class: "toast", text: msg });
@@ -34,6 +34,7 @@
     return r.json();
   }
 
+  // Repo de GitHub (para "Solicitar descarga"): config o deducido de la URL de GitHub Pages
   function repoGithub() {
     if (CFG.repoGithub) return CFG.repoGithub;
     const h = location.hostname;
@@ -45,6 +46,7 @@
     return "";
   }
 
+  // ---------------- Textos de cabecera ----------------
   if (CFG.titulo) { $("#titulo").textContent = CFG.titulo; }
   if (CFG.subtitulo) { $("#subtitulo").textContent = CFG.subtitulo; }
 
@@ -70,7 +72,7 @@
     return fCorta.format(d);
   }
 
-  // ---------------- Clima (Open-Meteo) ----------------
+  // ---------------- Clima (Open-Meteo, gratuito y sin clave) ----------------
   const WMO = {
     0: ["☀️", "Despejado"], 1: ["🌤️", "Mayormente despejado"], 2: ["⛅", "Parcialmente nublado"], 3: ["☁️", "Nublado"],
     45: ["🌫️", "Niebla"], 48: ["🌫️", "Niebla escarchada"],
@@ -131,14 +133,18 @@
   loadWeather(); setInterval(loadWeather, 15 * 60 * 1000);
 
   // ---------------- Canales en vivo ----------------
-  const tiles = {};
+  const tiles = {};          // clave -> {tile, iframe, player, canal, src}
   let ytReady = false;
   let audioKey = null;
   let featuredKey = store.get("dash.featured", (CFG.canales || [])[0]?.clave);
 
   // =================== MOTOR DE SEÑALES ===================
-  // Fuentes por canal en orden de prioridad (config.js -> fuentes). Si una cae,
-  // pasa sola a la siguiente; cada 10 min recarga los enlaces y vuelve a la principal.
+  // Cada canal tiene una lista de fuentes en orden de prioridad (config.js → fuentes).
+  //  - "hls":    transmisión oficial directa (m3u8) — se vigila y si cae, pasa a la siguiente
+  //  - "yt":     YouTube (video detectado automáticamente o transmisión del canal)
+  //  - "iframe": reproductor oficial insertado
+  // Un vigilante revisa cada 15 s que el video avance. Cada 10 min se recargan los
+  // enlaces (data/live.json) y se vuelve a intentar la fuente principal.
   const YT_Q = () => new URLSearchParams({ autoplay: "1", mute: "1", playsinline: "1", rel: "0", modestbranding: "1", enablejsapi: "1", origin: location.origin }).toString();
   let LIVE = {};
   function sources(canal) {
@@ -208,6 +214,7 @@
     t.box.innerHTML = "";
   }
 
+  // Carga la fuente idx (si no hay más, vuelve a empezar: nunca queda sin señal)
   async function startTile(key, idx, manual) {
     const t = tiles[key];
     if (!t.list.length) return;
@@ -250,7 +257,7 @@
       if (ytReady) attachYT(t, f, idx);
     } else {
       const f = el("iframe", { src: s.src, title: t.canal.nombre, allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, referrerpolicy: "no-referrer-when-downgrade" });
-      t.box.append(f); t.media = f; t.ok = true;
+      t.box.append(f); t.media = f; t.ok = true; // no se puede vigilar desde fuera
     }
   }
   function attachYT(t, f, idx) {
@@ -268,7 +275,7 @@
     Object.values(tiles).forEach(t => { if (t.list[t.idx]?.type === "yt" && t.media) attachYT(t, t.media, t.idx); });
   };
 
-  // Señales oficiales insertadas con URL de verificación: se comprueban cada 60 s
+  // Señales oficiales insertadas: si tienen URL de verificación, se comprueba cada 60 s
   setInterval(() => {
     Object.values(tiles).forEach(async t => {
       const s = t.list[t.idx];
@@ -299,7 +306,7 @@
         let st = -1;
         try { st = t.player && t.player.getPlayerState ? t.player.getPlayerState() : -1; } catch { }
         if (st === 1) { t.ok = true; t.stuck = 0; }
-        else if (st === 0) t.stuck = 9;
+        else if (st === 0) t.stuck = 9;            // transmisión terminó
         else if (st === 3 || st === -1 || st === 5) t.stuck++;
         if (t.stuck >= 3 || (!t.ok && edad > 30000)) startTile(t.canal.clave, t.idx + 1);
       }
@@ -347,13 +354,14 @@
       const cambio = sig(nueva) !== sig(t.list);
       const actual = t.list[t.idx];
       t.list = nueva;
+      // Volver a la fuente principal si cambió la lista o si se está usando una de respaldo
       if (force || cambio || t.idx !== 0 || !actual) startTile(t.canal.clave, 0);
     });
   }
   async function initTV() {
     try { LIVE = (await getJSON("data/live.json")).channels || {}; } catch { }
     buildTV();
-    setInterval(() => refreshLinks(false), 10 * 60 * 1000);
+    setInterval(() => refreshLinks(false), 10 * 60 * 1000);   // cada 10 minutos
   }
   initTV();
 
@@ -377,7 +385,7 @@
     CFG.redes.forEach(r => social.append(el("a", { href: r.url, target: "_blank", rel: "noopener", text: r.nombre })));
   } else social.remove();
 
-  const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
   function renderNews() {
     const list = $("#news-list");
@@ -387,7 +395,7 @@
       (!q || norm(n.title + " " + n.summary + " " + n.source).includes(q)));
     $("#news-count").textContent = items.length;
     list.innerHTML = "";
-    if (!items.length) { list.append(el("li", { class: "empty", text: news.length ? "Sin resultados para este filtro." : "Aún no hay noticias. Se actualizan cada 10 minutos." })); return; }
+    if (!items.length) { list.append(el("li", { class: "empty", text: news.length ? "Sin resultados para este filtro." : "Aún no hay noticias. Se actualizan cada 15 minutos." })); return; }
     const frag = document.createDocumentFragment();
     items.slice(0, 300).forEach(n => {
       frag.append(el("li", { class: "news-item" + (seen.has(n.id) ? "" : " is-new") },
@@ -423,6 +431,7 @@
       lastUpdate = d.updated;
       $("#news-updated").textContent = d.updated ? "act. " + hace(d.updated) : "";
       renderNews(); renderTicker();
+      // marcar como vistas para la próxima carga
       setTimeout(() => { news.forEach(n => seen.add(n.id)); store.set("dash.seen", [...seen].slice(-1500)); }, 15000);
       status();
     } catch (e) {
@@ -439,71 +448,285 @@
   setInterval(loadNews, (CFG.recargaSegundos || 120) * 1000);
   setInterval(status, 30000);
 
-  // ---------------- Descargas ----------------
-  let clips = [], tvItems = [], dlTab = "listos";
+  // ---------------- Videos, descargas y cámaras ----------------
+  const REPO = repoGithub();
+  const API = "https://api.github.com/repos/" + REPO;
+  let clips = [], tvItems = [], cams = [], dlTab = "videos", dlQuery = "";
+  let jobs = store.get("dash.jobs", []);              // descargas iniciadas en este equipo
+  const blobs = {};                                    // archivos descargados en esta sesión
+  const saveJobs = () => store.set("dash.jobs", jobs.slice(0, 40));
+  const token = () => store.get("dash.ghtoken", "");
+
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
     dlTab = b.dataset.tab;
     document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === b));
     renderDL();
   }));
+  $("#dl-search").addEventListener("input", e => { dlQuery = norm(e.target.value.trim()); renderDL(); });
 
   const mb = b => b ? (b / 1048576).toFixed(1).replace(".", ",") + " MB" : "";
   const dur = s => { if (!s) return ""; s = Math.round(s); const m = Math.floor(s / 60); return m + ":" + String(s % 60).padStart(2, "0"); };
-  const wa = text => "https://wa.me/?text=" + encodeURIComponent(text);
+  const vidOf = u => ((u || "").match(/(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{11})/) || [])[1];
 
-  async function share(title, url) {
-    if (navigator.share) { try { await navigator.share({ title, text: title, url }); return; } catch { } }
-    window.open(wa(title + "\n" + url), "_blank", "noopener");
+  // ---- Compartir: copia el enlace de la noticia
+  async function copiar(c) {
+    const url = c.source_url || c.url;
+    const texto = (c.title ? c.title + "\n" : "") + url;
+    let ok = false;
+    try { await navigator.clipboard.writeText(texto); ok = true; } catch { }
+    if (!ok) { const ta = el("textarea", { style: "position:fixed;opacity:0" }); ta.value = texto; document.body.append(ta); ta.select(); try { ok = document.execCommand("copy"); } catch { } ta.remove(); }
+    toast(ok ? "Enlace copiado. Péguelo en WhatsApp o donde lo necesite." : "No se pudo copiar: " + url);
   }
-  async function requestDownload(url) {
-    try { await navigator.clipboard.writeText(url); } catch { }
-    const repo = repoGithub();
-    if (repo) {
-      window.open("https://github.com/" + repo + "/actions/workflows/clips.yml", "_blank", "noopener");
-      toast("Enlace copiado. En GitHub pulse «Run workflow», pegue el enlace y en unos minutos aparecerá en «Listos para WhatsApp».");
-    } else {
-      toast("Enlace copiado. Configure «repoGithub» en config.js para solicitar descargas.");
+
+  // ---- Configuración del token
+  const dlg = $("#dl-dialog");
+  function abrirConfig(msg) {
+    $("#dl-token").value = token();
+    if (msg) toast(msg);
+    try { dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+  }
+  $("#dl-config").addEventListener("click", () => abrirConfig());
+  dlg.addEventListener("close", () => {
+    if (dlg.returnValue === "ok") { store.set("dash.ghtoken", $("#dl-token").value.trim()); toast("Descargas activadas en este equipo."); }
+    if (dlg.returnValue === "borrar") { store.set("dash.ghtoken", ""); toast("Token eliminado de este equipo."); }
+  });
+
+  async function gh(path, opts = {}) {
+    const r = await fetch(path.startsWith("http") ? path : API + path, Object.assign({}, opts, {
+      headers: Object.assign({ Accept: "application/vnd.github+json", Authorization: "Bearer " + token(), "X-GitHub-Api-Version": "2022-11-28" }, opts.headers || {})
+    }));
+    return r;
+  }
+
+  // ---- Motor de descarga
+  const PASOS = { "Set up job": 15, "Run actions/checkout@v4": 20, "Run actions/setup-python@v5": 25, "Instalar herramientas": 35, "Descargar y comprimir clips": 70, "Guardar cambios": 85 };
+  function setJob(j, patch) { Object.assign(j, patch); saveJobs(); if (dlTab === "descargas") renderDL(); updCount(); }
+
+  async function descargar(c) {
+    const url = c.source_url || c.url;
+    const ya = clips.find(x => x.source_url === url || (vidOf(url) && x.videoId === vidOf(url)));
+    if (ya) { return bajarArchivo(ya, null); }
+    if (!token()) return abrirConfig("Para descargar, primero active las descargas en este equipo.");
+    if (jobs.some(j => j.url === url && !["listo", "error"].includes(j.state))) { toast("Ese video ya se está descargando."); return irA("descargas"); }
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const j = { id, url, title: c.title, channel: c.channel, thumb: c.thumb, state: "solicitando", pct: 5, msg: "Enviando solicitud…", t: Date.now() };
+    jobs.unshift(j); saveJobs(); irA("descargas");
+    try {
+      const r = await gh("/actions/workflows/clips.yml/dispatches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { url, id } }) });
+      if (r.status === 401 || r.status === 403) { setJob(j, { state: "error", msg: "Token inválido o sin permisos. Revise ⚙." }); return; }
+      if (!r.ok) { setJob(j, { state: "error", msg: "GitHub rechazó la solicitud (" + r.status + ")." }); return; }
+      setJob(j, { state: "en cola", pct: 10, msg: "En cola en el descargador…" });
+      vigilar(j);
+    } catch (e) { setJob(j, { state: "error", msg: "Sin conexión con GitHub." }); }
+  }
+
+  async function vigilar(j) {
+    const fin = Date.now() + 20 * 60 * 1000;
+    while (Date.now() < fin && !["listo", "error"].includes(j.state)) {
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        if (!j.run) {
+          const r = await gh("/actions/workflows/clips.yml/runs?event=workflow_dispatch&per_page=15");
+          const d = await r.json();
+          const run = (d.workflow_runs || []).find(x => (x.display_title || x.name || "").includes(j.id));
+          if (run) setJob(j, { run: run.id });
+          continue;
+        }
+        const rr = await (await gh("/actions/runs/" + j.run)).json();
+        if (rr.status !== "completed") {
+          const jb = await (await gh("/actions/runs/" + j.run + "/jobs")).json();
+          const steps = (jb.jobs && jb.jobs[0] && jb.jobs[0].steps) || [];
+          const cur = steps.find(s => s.status === "in_progress") || steps.filter(s => s.status === "completed").pop();
+          const pct = cur ? (PASOS[cur.name] || j.pct) : 12;
+          const msg = !cur ? "Esperando un servidor libre…" : cur.name === "Descargar y comprimir clips" ? "Descargando y comprimiendo el video…" :
+            cur.name === "Guardar cambios" ? "Publicando el archivo…" : "Preparando el descargador…";
+          setJob(j, { state: "procesando", pct: Math.max(j.pct, pct), msg });
+          continue;
+        }
+        if (rr.conclusion !== "success") { setJob(j, { state: "error", msg: "El descargador falló. Intente de nuevo." }); break; }
+        // Leer clips.json actualizado
+        const cj = await (await gh("/contents/data/clips.json?ref=main&t=" + Date.now(), { headers: { Accept: "application/vnd.github.raw+json" } })).json();
+        const item = (cj.items || []).find(x => x.request_id === j.id);
+        if (!item) {
+          const err = (cj.errors || {})[j.id];
+          setJob(j, { state: "error", msg: err || "No se pudo obtener el video desde la fuente." });
+          break;
+        }
+        clips = cj.items || clips;
+        setJob(j, { state: "bajando", pct: 90, msg: "Bajando archivo…", file: item.file, size: item.size, duration: item.duration, download_url: item.download_url });
+        await bajarArchivo(item, j);
+      } catch (e) { /* reintenta en el próximo ciclo */ }
     }
+    if (!["listo", "error"].includes(j.state)) setJob(j, { state: "error", msg: "Tiempo de espera agotado." });
+  }
+
+  // Baja el MP4 dentro de la página (sin abrir otra pestaña) y lo guarda en el equipo
+  async function bajarArchivo(item, j) {
+    const guardar = (blob) => {
+      const u = URL.createObjectURL(blob);
+      blobs[item.file] = u;
+      const a = el("a", { href: u, download: item.file, style: "display:none" });
+      document.body.append(a); a.click(); a.remove();
+    };
+    if (blobs[item.file]) {
+      const a = el("a", { href: blobs[item.file], download: item.file, style: "display:none" });
+      document.body.append(a); a.click(); a.remove();
+      if (!j) toast("Guardando " + item.file);
+      return;
+    }
+    try {
+      let r = null;
+      if (token()) {
+        const rel = await (await gh("/releases/tags/clips")).json();
+        const as = (rel.assets || []).find(x => x.name === item.file);
+        if (as) r = await gh("/releases/assets/" + as.id, { headers: { Accept: "application/octet-stream" } });
+      }
+      if (!r || !r.ok || !r.body) throw new Error("sin stream");
+      const total = +r.headers.get("content-length") || item.size || 0;
+      const reader = r.body.getReader(); const parts = []; let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        parts.push(value); got += value.length;
+        if (j && total) setJob(j, { pct: 90 + Math.round(got / total * 10), msg: "Bajando archivo… " + mb(got) + " de " + mb(total) });
+      }
+      guardar(new Blob(parts, { type: "video/mp4" }));
+    } catch {
+      // Alternativa: descarga directa en un marco oculto (el archivo se guarda sin salir de la página)
+      const fr = el("iframe", { src: item.download_url, style: "display:none", title: "descarga" });
+      document.body.append(fr); setTimeout(() => fr.remove(), 120000);
+    }
+    if (j) setJob(j, { state: "listo", pct: 100, msg: "Descargado · " + [dur(item.duration), mb(item.size)].filter(Boolean).join(" · ") });
+    else toast("Descargando " + item.file);
+  }
+
+  function irA(tab) { const b = document.querySelector('.tab[data-tab="' + tab + '"]'); if (b) b.click(); }
+  function updCount() {
+    const act = jobs.filter(j => !["listo", "error"].includes(j.state)).length;
+    $("#dl-active").textContent = act ? String(act) : "";
+  }
+
+  function acciones(c) {
+    return el("div", { class: "dl-actions" },
+      el("button", { class: "btn btn-share", text: "🔗 Compartir", title: "Copiar enlace de la noticia", onclick: () => copiar(c) }),
+      el("button", { class: "btn btn-dl", text: "⬇ Descargar", title: "Descargar video comprimido", onclick: () => descargar(c) }),
+      el("a", { class: "btn btn-ghost", href: c.source_url || c.url, target: "_blank", rel: "noopener", text: "▶ Ver", title: "Abrir la fuente del video" })
+    );
+  }
+
+  function itemVideo(c, extra) {
+    return el("li", { class: "dl-item" },
+      el("img", { class: "dl-thumb", src: c.thumb || (vidOf(c.source_url || c.url) ? "https://i.ytimg.com/vi/" + vidOf(c.source_url || c.url) + "/mqdefault.jpg" : ""), alt: "", loading: "lazy" }),
+      el("div", { class: "dl-info" },
+        el("h3", { title: c.title, text: c.title }),
+        el("div", { class: "dl-meta" }, el("b", { text: c.channel || "" }), " · " + hace(c.published || (c.t && new Date(c.t).toISOString()))),
+        extra || null,
+        acciones(c)
+      ));
   }
 
   function renderDL() {
-    const list = $("#dl-list");
+    const list = $("#dl-list"), camsBox = $("#cams");
+    const isCam = dlTab === "camaras";
+    list.hidden = isCam; camsBox.hidden = !isCam;
+    $("#dl-search-wrap").hidden = dlTab !== "videos";
+    $("#dl-note").textContent = isCam ? "Cámaras en vivo de Santiago. Si una se cae, se reemplaza sola por otra." :
+      "Compartir copia el enlace · Descargar baja el video comprimido (MP4 480p) · Ver abre la fuente.";
+    $("#dl-count").textContent = isCam ? cams.length : dlTab === "videos" ? tvItems.length : jobs.length + clips.length;
+    if (isCam) { renderCams(); return; }
     list.innerHTML = "";
-    const items = dlTab === "listos" ? clips : tvItems;
-    $("#dl-count").textContent = clips.length;
-    if (!items.length) {
-      list.append(el("li", { class: "empty", text: dlTab === "listos" ? "Todavía no hay clips comprimidos. Se generan automáticamente cada 30 minutos." : "Sin videos recientes de los canales." }));
-      return;
-    }
     const frag = document.createDocumentFragment();
-    items.slice(0, 150).forEach(c => {
-      const ready = dlTab === "listos";
-      const pageUrl = c.source_url || c.url;
-      frag.append(el("li", { class: "dl-item" },
-        el("img", { class: "dl-thumb", src: c.thumb || "", alt: "", loading: "lazy" }),
-        el("div", { class: "dl-info" },
-          el("h3", { title: c.title, text: c.title }),
-          el("div", { class: "dl-meta" }, el("b", { text: c.channel || "" }), " · " + hace(c.published) +
-            (ready ? " · " + [dur(c.duration), mb(c.size)].filter(Boolean).join(" · ") : "")),
+    if (dlTab === "videos") {
+      const items = tvItems.filter(c => !dlQuery || norm(c.title + " " + c.channel).includes(dlQuery));
+      items.sort((a, b) => (b.relevant ? 1 : 0) - (a.relevant ? 1 : 0) || (b.published || "").localeCompare(a.published || ""));
+      if (!items.length) list.append(el("li", { class: "empty", text: "Sin videos recientes." }));
+      items.slice(0, 150).forEach(c => frag.append(itemVideo(c, c.relevant ? el("span", { class: "tag-cc", text: "Carabineros" }) : null)));
+    } else {
+      if (!jobs.length && !clips.length) list.append(el("li", { class: "empty", text: "Aún no hay descargas. Use «Descargar» en un video." }));
+      if (jobs.length) frag.append(el("li", { class: "dl-sec", text: "En este equipo" }));
+      jobs.forEach(j => {
+        const fin = j.state === "listo", err = j.state === "error";
+        const bar = el("div", { class: "prog" + (err ? " err" : fin ? " ok" : "") }, el("span", { style: "width:" + (err ? 100 : j.pct) + "%" }));
+        const extra = el("div", { class: "job" }, bar, el("div", { class: "job-msg", text: (fin ? "✅ " : err ? "⚠ " : "⏳ ") + j.msg }),
           el("div", { class: "dl-actions" },
-            ready
-              ? [el("a", { class: "btn btn-dl", href: c.download_url, download: c.file || true, text: "⬇ Descargar" }),
-                 el("button", { class: "btn btn-wa", text: "WhatsApp", onclick: () => share(c.title, c.download_url) })]
-              : [el("button", { class: "btn btn-dl", text: "⬇ Solicitar", title: "Pedir versión comprimida para WhatsApp", onclick: () => requestDownload(pageUrl) }),
-                 el("button", { class: "btn btn-wa", text: "WhatsApp", onclick: () => share(c.title, pageUrl) })],
-            el("a", { class: "btn btn-ghost", href: pageUrl, target: "_blank", rel: "noopener", text: "Ver" })
-          )
-        )
-      ));
-    });
+            el("button", { class: "btn btn-share", text: "🔗", title: "Copiar enlace de la noticia", onclick: () => copiar(j) }),
+            el("a", { class: "btn btn-ghost", href: j.url, target: "_blank", rel: "noopener", text: "▶", title: "Ver la fuente" }),
+            fin ? el("button", { class: "btn btn-dl", text: "💾 Guardar otra vez", onclick: () => bajarArchivo({ file: j.file, size: j.size, duration: j.duration, download_url: j.download_url }, null) }) : null,
+            err ? el("button", { class: "btn btn-dl", text: "↻ Reintentar", onclick: () => { jobs = jobs.filter(x => x !== j); saveJobs(); descargar(j); } }) : null,
+            (fin || err) ? el("button", { class: "btn btn-ghost", text: "✕", title: "Quitar de la lista", onclick: () => { jobs = jobs.filter(x => x !== j); saveJobs(); renderDL(); } }) : null));
+        frag.append(el("li", { class: "dl-item" },
+          el("img", { class: "dl-thumb", src: j.thumb || (vidOf(j.url) ? "https://i.ytimg.com/vi/" + vidOf(j.url) + "/mqdefault.jpg" : ""), alt: "" }),
+          el("div", { class: "dl-info" }, el("h3", { text: j.title || j.url }), el("div", { class: "dl-meta" }, el("b", { text: j.channel || "" }), " · " + hace(new Date(j.t).toISOString())), extra)));
+      });
+      if (clips.length) frag.append(el("li", { class: "dl-sec", text: "Archivos disponibles" }));
+      clips.forEach(c => frag.append(itemVideo(c, el("div", { class: "dl-meta", text: "MP4 · " + [dur(c.duration), mb(c.size)].filter(Boolean).join(" · ") }))));
+    }
     list.append(frag);
   }
+
+  // ---- Cámaras de Santiago con reemplazo automático
+  const CAM_SLOTS = 4;
+  const camState = { slots: [], used: new Set() };
+  function camSrc(id) { return "https://www.youtube.com/embed/" + id + "?" + YT_Q(); }
+  function nextCam() { return cams.find(c => !camState.used.has(c.id)); }
+  function loadCam(slot, cam) {
+    if (slot.cam) camState.used.delete(slot.cam.id);
+    slot.cam = cam || null; slot.ok = false; slot.stuck = 0; slot.started = Date.now();
+    slot.player = null;
+    slot.box.innerHTML = "";
+    if (!cam) { slot.box.append(el("div", { class: "empty", text: "Buscando otra cámara…" })); slot.title.textContent = "Sin señal"; return; }
+    camState.used.add(cam.id);
+    slot.title.textContent = cam.title.replace(/\s*[|·].*$/, "").slice(0, 60) || cam.channel;
+    slot.title.title = cam.title;
+    const f = el("iframe", { src: camSrc(cam.id), allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, title: cam.title });
+    slot.box.append(f);
+    if (ytReady) try { slot.player = new YT.Player(f, { events: { onError: () => slot.cam === cam && replaceCam(slot), onStateChange: e => { if (e.data === 1) slot.ok = true; } } }); } catch { }
+  }
+  function replaceCam(slot) { const n = nextCam(); if (slot.cam) camState.used.delete(slot.cam.id); loadCam(slot, n || cams[(cams.indexOf(slot.cam) + 1) % cams.length]); }
+  function renderCams() {
+    const box = $("#cams");
+    if (camState.slots.length) return;      // ya construidas (no recargar videos al cambiar de pestaña)
+    box.innerHTML = "";
+    if (!cams.length) { box.append(el("div", { class: "empty", text: "Buscando cámaras en vivo de Santiago…" })); return; }
+    for (let i = 0; i < Math.min(CAM_SLOTS, cams.length); i++) {
+      const title = el("span", { class: "cam-t" });
+      const vbox = el("div", { class: "cam-v" });
+      const slot = { box: vbox, title };
+      const card = el("div", { class: "cam" },
+        el("div", { class: "cam-h" }, el("span", { class: "live-dot" }), title,
+          el("button", { class: "tbtn", title: "Cambiar cámara", text: "⇄", onclick: () => replaceCam(slot) }),
+          el("button", { class: "tbtn", title: "Pantalla completa", text: "⛶", onclick: () => (card.requestFullscreen || function () { }).call(card) }),
+          el("button", { class: "tbtn", title: "Ver en YouTube", text: "↗", onclick: () => slot.cam && window.open("https://www.youtube.com/watch?v=" + slot.cam.id, "_blank", "noopener") })),
+        vbox);
+      box.append(card); camState.slots.push(slot);
+      loadCam(slot, nextCam());
+    }
+  }
+  // Vigilante de cámaras (cada 20 s)
+  setInterval(() => {
+    camState.slots.forEach(slot => {
+      if (!slot.cam) { const n = nextCam(); if (n) loadCam(slot, n); return; }
+      let st = -1; try { st = slot.player && slot.player.getPlayerState ? slot.player.getPlayerState() : -1; } catch { }
+      if (st === 1) { slot.ok = true; slot.stuck = 0; } else if (st === 0) slot.stuck = 9; else if (st !== 2) slot.stuck++;
+      if (slot.stuck >= 3 || (!slot.ok && Date.now() - slot.started > 40000)) replaceCam(slot);
+    });
+  }, 20000);
 
   async function loadDL() {
     try { clips = (await getJSON("data/clips.json")).items || []; } catch { clips = []; }
     try { tvItems = (await getJSON("data/tv.json")).items || []; } catch { tvItems = []; }
-    renderDL();
+    try {
+      const nuevas = (await getJSON("data/camaras.json")).items || [];
+      if (nuevas.length) {
+        cams = nuevas;
+        // cámaras que ya no están en vivo: reemplazarlas
+        camState.slots.forEach(sl => { if (sl.cam && !cams.some(c => c.id === sl.cam.id)) replaceCam(sl); });
+      }
+    } catch { }
+    if (dlTab !== "camaras" || !camState.slots.length) renderDL();
+    updCount();
   }
   loadDL();
   setInterval(loadDL, (CFG.recargaSegundos || 120) * 1000);
+  // retomar descargas que quedaron en curso
+  jobs.filter(j => !["listo", "error"].includes(j.state)).forEach(j => { if (Date.now() - j.t < 20 * 60 * 1000) vigilar(j); else setJob(j, { state: "error", msg: "Se interrumpió la descarga." }); });
 })();
