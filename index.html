@@ -61,18 +61,22 @@
       <div class="tv-grid" id="tv-grid"></div>
     </section>
 
-    <!-- COLUMNA DESCARGAS -->
+    <!-- COLUMNA DESCARGAS / VIDEOS / CÁMARAS -->
     <section class="col col-dl" aria-label="Descargas">
       <div class="col-head">
-        <h2>Descargas TV</h2>
+        <h2>Videos y cámaras</h2>
         <span class="badge" id="dl-count">0</span>
+        <button class="head-btn" id="dl-config" title="Configurar descargas">⚙</button>
       </div>
       <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="listos" role="tab">Listos para WhatsApp</button>
-        <button class="tab" data-tab="todo" role="tab">Todo lo emitido</button>
+        <button class="tab active" data-tab="videos" role="tab">Videos TV</button>
+        <button class="tab" data-tab="descargas" role="tab">Descargas <span class="tab-n" id="dl-active"></span></button>
+        <button class="tab" data-tab="camaras" role="tab">Cámaras</button>
       </div>
+      <div class="dl-search" id="dl-search-wrap"><input type="search" id="dl-search" placeholder="Filtrar videos…" aria-label="Filtrar videos"></div>
       <ul class="dl-list" id="dl-list"><li class="empty">Cargando…</li></ul>
-      <p class="dl-note">Videos comprimidos en MP4 (480p) para enviar por WhatsApp. Se generan automáticamente cuando un canal publica una nota sobre Carabineros.</p>
+      <div class="cams" id="cams" hidden></div>
+      <p class="dl-note" id="dl-note">Compartir copia el enlace · Descargar baja el video comprimido (MP4 480p) · Ver abre la fuente.</p>
     </section>
   </main>
 
@@ -80,6 +84,25 @@
     <span>Uso interno · Monitoreo de prensa</span>
     <span id="foot-status">Conectando…</span>
   </footer>
+
+  <dialog id="dl-dialog">
+    <form method="dialog" class="dlg">
+      <h3>Activar descargas en este equipo</h3>
+      <p>Las descargas las hace el descargador del dashboard en GitHub. Para que este equipo pueda iniciarlas, pegue aquí un <b>token de acceso de GitHub</b> (solo se guarda en este navegador).</p>
+      <ol>
+        <li>Abra <b>github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token</b>.</li>
+        <li>Repository access: <b>Only select repositories → dashboard-carabineros</b>.</li>
+        <li>Permissions → Repository: <b>Actions: Read and write</b> y <b>Contents: Read-only</b>.</li>
+        <li>Genere el token, cópielo y péguelo abajo.</li>
+      </ol>
+      <input type="password" id="dl-token" placeholder="github_pat_…" autocomplete="off">
+      <div class="dlg-actions">
+        <button value="borrar" class="btn btn-ghost" id="dl-token-clear">Quitar token</button>
+        <button value="cancel" class="btn btn-ghost">Cancelar</button>
+        <button value="ok" class="btn btn-dl" id="dl-token-save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="config.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
