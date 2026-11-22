@@ -57,6 +57,9 @@ window.DASH_CONFIG = {
   // Cada cuántos segundos se recargan noticias y descargas en pantalla
   recargaSegundos: 60,
 
+  // Cada cuántos segundos entra una noticia por arriba en la columna (rotación en vivo)
+  rotacionSegundos: 7,
+
   // Radio Carabineros de Chile (banner inferior). Si hay más de una URL,
   // se usa la siguiente cuando la primera se cae.
   radio: {
