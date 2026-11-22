@@ -201,9 +201,16 @@
       ponerCapa(capaActual);
       layerGroup = L.layerGroup().addTo(map);
       L.control.scale({ imperial: false }).addTo(map);
-      map.fitBounds([[-41.5, -74.5], [-18.3, -68.5]]);
+      let primero = true;
+      const ajustar = () => {
+        map.invalidateSize();
+        if (primero && $("#mp-map").clientWidth > 300) { primero = false; map.fitBounds([[-41.5, -74.5], [-18.3, -68.5]]); }
+      };
+      if (window.ResizeObserver) new ResizeObserver(ajustar).observe($("#mp-map"));
+      window.addEventListener("resize", ajustar);
+      ajustar();
     }
-    setTimeout(() => map.invalidateSize(), 50);
+    [50, 300, 900].forEach(t => setTimeout(() => map.invalidateSize(), t));
     await cargarDatos();
     clearInterval(timer);
     timer = setInterval(cargarDatos, 60000);          // actualización constante (cada minuto)
