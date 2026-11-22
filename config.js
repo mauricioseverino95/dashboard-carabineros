@@ -55,5 +55,5 @@ window.DASH_CONFIG = {
   ],
 
   // Cada cuántos segundos se recargan noticias y descargas en pantalla
-  recargaSegundos: 120
+  recargaSegundos: 60
 };
