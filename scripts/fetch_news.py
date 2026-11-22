@@ -484,33 +484,36 @@ def main():
         log("mapa error", e)
     write("tv.json", {"updated": NOW.isoformat(), "items": tv[:120]})
 
-    # --- Señales en vivo y cámaras: cada ~10 min (las noticias y el mapa, cada minuto)
-    if _edad_min("live.json") < 9 and not os.environ.get("FORZAR_VIVO"):
-        log(f"OK: {len(items)} noticias, {len(tv)} videos TV (señales en vivo sin cambios)")
-        return
-    with ThreadPoolExecutor(5) as ex:
-        lives = list(ex.map(resolve_live, channels))
-    try:
-        prev = json.loads((DATA / "live.json").read_text(encoding="utf-8")).get("channels", {})
-    except (OSError, ValueError):
-        prev = {}
-    live = {}
-    for c, vids in zip(channels, lives):
-        if vids:
-            live[c["clave"]] = {"videoId": vids[0], "alts": vids[1:5]}
-        else:  # si ahora no se pudo detectar, conservar lo último conocido
-            live[c["clave"]] = prev.get(c["clave"]) or {"videoId": None, "alts": []}
-    log("en vivo:", {k: v["videoId"] for k, v in live.items()})
-    write("live.json", {"updated": NOW.isoformat(), "channels": live})
-    # --- Cámaras de Santiago
-    cams = resolve_cams()
-    if not cams:
+    # --- Señales en vivo: cada ~1 hora (si una se cae, el dashboard cambia solo a la de respaldo)
+    if _edad_min("live.json") >= 59 or os.environ.get("FORZAR_VIVO"):
+        with ThreadPoolExecutor(5) as ex:
+            lives = list(ex.map(resolve_live, channels))
         try:
-            cams = json.loads((DATA / "camaras.json").read_text(encoding="utf-8")).get("items", [])
+            prev = json.loads((DATA / "live.json").read_text(encoding="utf-8")).get("channels", {})
         except (OSError, ValueError):
-            cams = []
-    write("camaras.json", {"updated": NOW.isoformat(), "items": cams[:12]})
-    log(f"OK: {len(items)} noticias, {len(tv)} videos TV, {len(cams)} camaras")
+            prev = {}
+        live = {}
+        for c, vids in zip(channels, lives):
+            if vids:
+                live[c["clave"]] = {"videoId": vids[0], "alts": vids[1:5]}
+            else:  # si ahora no se pudo detectar, conservar lo último conocido
+                live[c["clave"]] = prev.get(c["clave"]) or {"videoId": None, "alts": []}
+        log("en vivo:", {k: v["videoId"] for k, v in live.items()})
+        write("live.json", {"updated": NOW.isoformat(), "channels": live})
+    else:
+        log("señales en vivo sin cambios (se revisan cada hora)")
+
+    # --- Cámaras de Santiago: cada ~10 minutos
+    if _edad_min("camaras.json") >= 9 or os.environ.get("FORZAR_VIVO"):
+        cams = resolve_cams()
+        if not cams:
+            try:
+                cams = json.loads((DATA / "camaras.json").read_text(encoding="utf-8")).get("items", [])
+            except (OSError, ValueError):
+                cams = []
+        write("camaras.json", {"updated": NOW.isoformat(), "items": cams[:12]})
+        log(f"camaras: {len(cams)}")
+    log(f"OK: {len(items)} noticias, {len(tv)} videos TV")
 
 
 def _edad_min(name):
