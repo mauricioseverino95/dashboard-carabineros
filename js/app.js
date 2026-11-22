@@ -21,7 +21,7 @@
   };
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } }
   };
   function toast(msg) {
     const t = el("div", { class: "toast", text: msg });
@@ -34,7 +34,6 @@
     return r.json();
   }
 
-  // Repo de GitHub (para "Solicitar descarga"): config o deducido de la URL de GitHub Pages
   function repoGithub() {
     if (CFG.repoGithub) return CFG.repoGithub;
     const h = location.hostname;
@@ -46,7 +45,6 @@
     return "";
   }
 
-  // ---------------- Textos de cabecera ----------------
   if (CFG.titulo) { $("#titulo").textContent = CFG.titulo; }
   if (CFG.subtitulo) { $("#subtitulo").textContent = CFG.subtitulo; }
 
@@ -72,7 +70,7 @@
     return fCorta.format(d);
   }
 
-  // ---------------- Clima (Open-Meteo, gratuito y sin clave) ----------------
+  // ---------------- Clima (Open-Meteo) ----------------
   const WMO = {
     0: ["☀️", "Despejado"], 1: ["🌤️", "Mayormente despejado"], 2: ["⛅", "Parcialmente nublado"], 3: ["☁️", "Nublado"],
     45: ["🌫️", "Niebla"], 48: ["🌫️", "Niebla escarchada"],
@@ -138,82 +136,192 @@
   let audioKey = null;
   let featuredKey = store.get("dash.featured", (CFG.canales || [])[0]?.clave);
 
-  function liveSrc(canal, liveInfo) {
-    const vid = canal.videoId || (liveInfo && liveInfo.videoId);
-    const base = vid
-      ? "https://www.youtube.com/embed/" + encodeURIComponent(vid)
-      : "https://www.youtube.com/embed/live_stream?channel=" + encodeURIComponent(canal.youtube);
-    const q = new URLSearchParams({ autoplay: "1", mute: "1", playsinline: "1", rel: "0", modestbranding: "1", enablejsapi: "1", origin: location.origin });
-    return base + (base.includes("?") ? "&" : "?") + q.toString();
+  // =================== MOTOR DE SEÑALES ===================
+  // Fuentes por canal en orden de prioridad (config.js -> fuentes). Si una cae,
+  // pasa sola a la siguiente; cada 10 min recarga los enlaces y vuelve a la principal.
+  const YT_Q = () => new URLSearchParams({ autoplay: "1", mute: "1", playsinline: "1", rel: "0", modestbranding: "1", enablejsapi: "1", origin: location.origin }).toString();
+  let LIVE = {};
+  function sources(canal) {
+    const out = [];
+    const live = LIVE[canal.clave] || {};
+    (canal.fuentes || []).forEach(f => {
+      if (f.tipo === "yt-auto") {
+        const vids = [canal.videoId, live.videoId, ...(live.alts || [])].filter(Boolean);
+        [...new Set(vids)].forEach(v => out.push({ type: "yt", label: "YouTube oficial del canal", src: "https://www.youtube.com/embed/" + encodeURIComponent(v) + "?" + YT_Q() }));
+        if (canal.youtube) out.push({ type: "yt", label: "YouTube oficial del canal", src: "https://www.youtube.com/embed/live_stream?channel=" + encodeURIComponent(canal.youtube) + "&" + YT_Q() });
+      } else if (f.tipo === "hls") {
+        out.push({ type: "hls", label: f.nombre || "Señal oficial", src: f.url });
+      } else if (f.tipo === "iframe") {
+        out.push({ type: "iframe", label: f.nombre || "Señal oficial", src: f.url, check: f.verificar || null });
+      }
+    });
+    return out;
+  }
+  const sig = list => list.map(x => x.src).join("|");
+
+  let hlsLib = null;
+  function loadHls() {
+    if (hlsLib) return hlsLib;
+    hlsLib = new Promise(res => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
+      sc.onload = () => res(window.Hls); sc.onerror = () => res(null);
+      document.head.append(sc);
+    });
+    return hlsLib;
   }
 
-  function buildTV(live) {
+  function buildTV() {
     const grid = $("#tv-grid");
     grid.innerHTML = "";
     (CFG.canales || []).forEach((canal, i) => {
-      const iframe = el("iframe", {
-        src: liveSrc(canal, live[canal.clave]), title: canal.nombre + " en vivo",
-        allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, loading: "eager",
-        referrerpolicy: "strict-origin-when-cross-origin"
-      });
+      const box = el("div", { class: "tile-video" });
+      const badge = el("span", { class: "src-badge" });
       const btnAudio = el("button", { class: "tbtn", title: "Activar audio", text: "🔇", onclick: () => toggleAudio(canal.clave) });
       const btnFeat = el("button", { class: "tbtn", title: "Destacar en grande", text: "⤢", onclick: () => setFeatured(canal.clave) });
+      const btnNext = el("button", { class: "tbtn tb-opt", title: "Cambiar a la señal alternativa", text: "⇄", onclick: () => startTile(canal.clave, tiles[canal.clave].idx + 1, true) });
       const btnFull = el("button", { class: "tbtn tb-opt", title: "Pantalla completa", text: "⛶", onclick: () => full(canal.clave) });
-      const btnReload = el("button", { class: "tbtn tb-opt", title: "Recargar señal", text: "↻", onclick: () => reloadTile(canal.clave) });
       const tile = el("article", { class: "tile", "data-key": canal.clave, style: "order:" + (i + 1) },
         el("div", { class: "tile-head" },
           el("span", { class: "live-dot" }),
           el("span", { class: "tile-name" }, el("span", { class: "n-full", text: canal.nombre }), el("span", { class: "n-short", text: canal.corto || canal.nombre })),
-          btnAudio, btnFeat, btnReload, btnFull,
-          el("a", { class: "tbtn", href: canal.oficial, target: "_blank", rel: "noopener", title: "Abrir señal oficial", text: "↗" })
+          badge, btnAudio, btnFeat, btnNext, btnFull,
+          el("a", { class: "tbtn", href: canal.oficial, target: "_blank", rel: "noopener", title: "Abrir página oficial", text: "↗" })
         ),
-        el("div", { class: "tile-video" }, iframe,
-          el("div", { class: "tile-fallback" },
-            el("div", {}, "Esta señal no está transmitiendo en YouTube en este momento.", el("br"),
-              el("a", { href: canal.oficial, target: "_blank", rel: "noopener", text: "Ver en sitio oficial" })))
-        )
+        box
       );
-      tiles[canal.clave] = { tile, iframe, canal, btnAudio, src: iframe.src, player: null };
+      tiles[canal.clave] = { tile, box, canal, btnAudio, badge, list: sources(canal), idx: 0, media: null, player: null, hls: null, lastT: -1, stuck: 0, started: 0, ok: false };
       grid.append(tile);
     });
-
     grid.append(el("article", { class: "forecast", style: "order:99" },
       el("div", { class: "tile-head" }, el("span", { class: "tile-name", text: "Pronóstico · " + ((CFG.clima || {}).nombre || "Santiago") })),
       el("div", { class: "fc-body", id: "fc-body" }, el("div", { class: "empty", style: "grid-column:1/-1", text: "Cargando pronóstico…" }))
     ));
     setFeatured(featuredKey, true);
-    if (ytReady) attachPlayers();
+    Object.keys(tiles).forEach(k => startTile(k, 0));
   }
 
-  function attachPlayers() {
-    Object.values(tiles).forEach(t => {
-      if (t.player || !window.YT || !YT.Player) return;
-      try {
-        t.player = new YT.Player(t.iframe, {
-          events: {
-            onError: () => t.tile.classList.add("failed"),
-            onStateChange: () => t.tile.classList.remove("failed")
-          }
-        });
-      } catch { }
-    });
+  function teardown(t) {
+    try { t.hls && t.hls.destroy(); } catch { }
+    try { t.player && t.player.destroy && t.player.destroy(); } catch { }
+    t.hls = null; t.player = null; t.media = null;
+    t.box.innerHTML = "";
   }
-  window.onYouTubeIframeAPIReady = function () { ytReady = true; attachPlayers(); };
+
+  async function startTile(key, idx, manual) {
+    const t = tiles[key];
+    if (!t.list.length) return;
+    if (idx >= t.list.length) idx = 0;
+    teardown(t);
+    t.idx = idx; t.ok = false; t.lastT = -1; t.stuck = 0; t.started = Date.now();
+    const s = t.list[idx];
+    const audio = audioKey === key;
+    t.badge.textContent = s.type === "yt" ? "YOUTUBE" : "OFICIAL";
+    t.badge.title = s.label + (t.list.length > 1 ? " · fuente " + (idx + 1) + " de " + t.list.length : "");
+    t.tile.classList.toggle("is-oficial", s.type !== "yt");
+
+    if (s.type === "hls") {
+      const v = el("video", { autoplay: true, playsinline: true, controls: true });
+      v.muted = !audio;
+      t.box.append(v); t.media = v;
+      const fail = () => { if (tiles[key] === t && t.media === v) startTile(key, idx + 1); };
+      v.addEventListener("playing", () => { t.ok = true; });
+      v.addEventListener("error", fail);
+      if (v.canPlayType("application/vnd.apple.mpegurl")) {
+        v.src = s.src;
+      } else {
+        const Hls = await loadHls();
+        if (t.media !== v) return;
+        if (!Hls || !Hls.isSupported()) return fail();
+        const h = new Hls({ liveSyncDurationCount: 3, manifestLoadingMaxRetry: 2, levelLoadingMaxRetry: 2, fragLoadingMaxRetry: 3 });
+        t.hls = h;
+        h.on(Hls.Events.ERROR, (_, d) => {
+          if (!d.fatal) return;
+          if (d.type === Hls.ErrorTypes.MEDIA_ERROR) { try { h.recoverMediaError(); return; } catch { } }
+          fail();
+        });
+        h.loadSource(s.src); h.attachMedia(v);
+      }
+      v.play().catch(() => { v.muted = true; v.play().catch(() => { }); });
+    } else if (s.type === "yt") {
+      const f = el("iframe", { src: audio ? s.src.replace("mute=1", "mute=0") : s.src, title: t.canal.nombre,
+        allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, referrerpolicy: "strict-origin-when-cross-origin" });
+      t.box.append(f); t.media = f;
+      if (ytReady) attachYT(t, f, idx);
+    } else {
+      const f = el("iframe", { src: s.src, title: t.canal.nombre, allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, referrerpolicy: "no-referrer-when-downgrade" });
+      t.box.append(f); t.media = f; t.ok = true;
+    }
+  }
+  function attachYT(t, f, idx) {
+    if (t.player || !window.YT || !YT.Player) return;
+    const key = t.canal.clave;
+    try {
+      t.player = new YT.Player(f, { events: {
+        onError: () => { if (t.idx === idx && t.media === f) startTile(key, idx + 1); },
+        onStateChange: e => { if (e.data === 1) t.ok = true; }
+      } });
+    } catch { }
+  }
+  window.onYouTubeIframeAPIReady = function () {
+    ytReady = true;
+    Object.values(tiles).forEach(t => { if (t.list[t.idx]?.type === "yt" && t.media) attachYT(t, t.media, t.idx); });
+  };
+
+  // Señales oficiales insertadas con URL de verificación: se comprueban cada 60 s
+  setInterval(() => {
+    Object.values(tiles).forEach(async t => {
+      const s = t.list[t.idx];
+      if (!s || s.type !== "iframe" || !s.check) return;
+      const idx = t.idx;
+      try {
+        const r = await fetch(s.check + (s.check.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" });
+        if (!r.ok) throw new Error(r.status);
+        t.checkFails = 0;
+      } catch {
+        t.checkFails = (t.checkFails || 0) + 1;
+        if (t.checkFails >= 2 && t.idx === idx) { t.checkFails = 0; startTile(t.canal.clave, idx + 1); }
+      }
+    });
+  }, 60000);
+
+  // Vigilante: cada 15 s comprueba que cada señal esté avanzando
+  setInterval(() => {
+    Object.values(tiles).forEach(t => {
+      const s = t.list[t.idx]; if (!s) return;
+      const edad = Date.now() - t.started;
+      if (s.type === "hls" && t.media) {
+        const ct = t.media.currentTime;
+        if (!t.media.paused && ct === t.lastT) t.stuck++; else t.stuck = 0;
+        t.lastT = ct;
+        if ((t.stuck >= 3) || (!t.ok && edad > 30000)) startTile(t.canal.clave, t.idx + 1);
+      } else if (s.type === "yt") {
+        let st = -1;
+        try { st = t.player && t.player.getPlayerState ? t.player.getPlayerState() : -1; } catch { }
+        if (st === 1) { t.ok = true; t.stuck = 0; }
+        else if (st === 0) t.stuck = 9;
+        else if (st === 3 || st === -1 || st === 5) t.stuck++;
+        if (t.stuck >= 3 || (!t.ok && edad > 30000)) startTile(t.canal.clave, t.idx + 1);
+      }
+    });
+  }, 15000);
 
   function toggleAudio(key) {
-    const next = audioKey === key ? null : key;
+    const prev = audioKey;
+    audioKey = prev === key ? null : key;
     Object.entries(tiles).forEach(([k, t]) => {
-      const on = k === next;
+      const on = k === audioKey;
       t.tile.classList.toggle("audio-on", on);
       t.btnAudio.textContent = on ? "🔊" : "🔇";
       t.btnAudio.classList.toggle("on", on);
-      if (t.player && typeof t.player.mute === "function") {
-        try { on ? (t.player.unMute(), t.player.setVolume(100), t.player.playVideo()) : t.player.mute(); } catch { }
-      } else if (on || k === audioKey) {
-        t.iframe.src = t.src.replace("mute=1", "mute=" + (on ? "0" : "1"));
+      const s = t.list[t.idx]; if (!s || !t.media) return;
+      if (s.type === "hls") { t.media.muted = !on; if (on) t.media.play().catch(() => { }); }
+      else if (s.type === "yt") {
+        if (t.player && typeof t.player.mute === "function") {
+          try { on ? (t.player.unMute(), t.player.setVolume(100), t.player.playVideo()) : t.player.mute(); } catch { }
+        } else if (on || k === prev) t.media.src = s.src.replace("mute=1", "mute=" + (on ? "0" : "1"));
       }
     });
-    audioKey = next;
   }
   function setFeatured(key, silent) {
     if (!tiles[key]) key = Object.keys(tiles)[0];
@@ -231,28 +339,21 @@
     const t = tiles[key].tile;
     (t.requestFullscreen || t.webkitRequestFullscreen || function () { }).call(t);
   }
-  function reloadTile(key, src) {
-    const t = tiles[key];
-    t.tile.classList.remove("failed");
-    if (src) t.src = src;
-    t.player = null;
-    t.iframe.src = t.src;
-    if (ytReady) setTimeout(attachPlayers, 300);
-  }
 
+  async function refreshLinks(force) {
+    try { LIVE = (await getJSON("data/live.json")).channels || {}; } catch { }
+    Object.values(tiles).forEach(t => {
+      const nueva = sources(t.canal);
+      const cambio = sig(nueva) !== sig(t.list);
+      const actual = t.list[t.idx];
+      t.list = nueva;
+      if (force || cambio || t.idx !== 0 || !actual) startTile(t.canal.clave, 0);
+    });
+  }
   async function initTV() {
-    let live = {};
-    try { live = (await getJSON("data/live.json")).channels || {}; } catch { }
-    buildTV(live);
-    setInterval(async () => {
-      try {
-        const l = (await getJSON("data/live.json")).channels || {};
-        Object.values(tiles).forEach(t => {
-          const nuevo = liveSrc(t.canal, l[t.canal.clave]);
-          if (nuevo !== t.src && !t.canal.videoId) reloadTile(t.canal.clave, nuevo);
-        });
-      } catch { }
-    }, 10 * 60 * 1000);
+    try { LIVE = (await getJSON("data/live.json")).channels || {}; } catch { }
+    buildTV();
+    setInterval(() => refreshLinks(false), 10 * 60 * 1000);
   }
   initTV();
 
@@ -286,7 +387,7 @@
       (!q || norm(n.title + " " + n.summary + " " + n.source).includes(q)));
     $("#news-count").textContent = items.length;
     list.innerHTML = "";
-    if (!items.length) { list.append(el("li", { class: "empty", text: news.length ? "Sin resultados para este filtro." : "Aún no hay noticias. Se actualizan cada 15 minutos." })); return; }
+    if (!items.length) { list.append(el("li", { class: "empty", text: news.length ? "Sin resultados para este filtro." : "Aún no hay noticias. Se actualizan cada 10 minutos." })); return; }
     const frag = document.createDocumentFragment();
     items.slice(0, 300).forEach(n => {
       frag.append(el("li", { class: "news-item" + (seen.has(n.id) ? "" : " is-new") },
