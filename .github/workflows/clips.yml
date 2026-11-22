@@ -1,12 +1,17 @@
 name: Clips para WhatsApp
+run-name: ${{ github.event.inputs.id && format('Descarga {0}', github.event.inputs.id) || 'Clips automáticos' }}
 
 on:
   schedule:
-    - cron: "7,37 * * * *"     # cada 30 minutos
+    - cron: "7 */2 * * *"      # cada 2 horas (clips automáticos)
   workflow_dispatch:
     inputs:
       url:
         description: "Enlace del video a descargar (YouTube u otro). Puede pegar varios separados por espacio."
+        required: false
+        default: ""
+      id:
+        description: "Identificador de la solicitud (lo completa el dashboard)"
         required: false
         default: ""
 
@@ -35,6 +40,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           URLS: ${{ github.event.inputs.url }}
+          REQ_ID: ${{ github.event.inputs.id }}
         run: python scripts/clips.py $URLS
       - name: Guardar cambios
         run: |
