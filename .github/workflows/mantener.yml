@@ -1,0 +1,25 @@
+name: Mantener activo
+
+# GitHub desactiva las tareas programadas de un repositorio público tras 60 días
+# sin cambios. Este guardado semanal mantiene el repositorio activo.
+on:
+  schedule:
+    - cron: "17 12 * * 1"     # lunes 12:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  latido:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Registrar latido semanal
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .latido
+          git config user.name  "monitor-bot"
+          git config user.email "monitor-bot@users.noreply.github.com"
+          git add .latido
+          git commit -m "Latido semanal $(date -u +%F)"
+          for i in 1 2 3; do git pull --rebase && git push && break; sleep 5; done
