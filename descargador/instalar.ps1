@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Origen = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Origen = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { '' }
 $Destino = Join-Path $env:LOCALAPPDATA 'DescargadorCarabineros'
 $Bin = Join-Path $Destino 'bin'
 $Inicio = [Environment]::GetFolderPath('Startup')
@@ -17,6 +17,7 @@ Write-Host '==============================================================' -For
 Write-Host '   Descargador de videos - Carabineros de Chile (yt-dlp)' -ForegroundColor Yellow
 Write-Host '==============================================================' -ForegroundColor DarkGreen
 
+try {
 Paso 'Deteniendo una version anterior (si existe)...'
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*DescargadorCarabineros*servidor.ps1*' } |
@@ -24,7 +25,13 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction Silen
 Start-Sleep -Seconds 1
 
 New-Item -ItemType Directory -Force -Path $Bin | Out-Null
-Copy-Item -Path (Join-Path $Origen 'servidor.ps1') -Destination $Destino -Force
+$Raw = 'https://raw.githubusercontent.com/mauricioseverino95/dashboard-carabineros/main/descargador/'
+if ($Origen -and (Test-Path (Join-Path $Origen 'servidor.ps1'))) {
+    Copy-Item -Path (Join-Path $Origen 'servidor.ps1') -Destination $Destino -Force
+} else {
+    Paso 'Descargando el programa del descargador...'
+    Invoke-WebRequest -UseBasicParsing -Uri ($Raw + 'servidor.ps1') -OutFile (Join-Path $Destino 'servidor.ps1')
+}
 
 Paso 'Descargando yt-dlp (github.com/yt-dlp/yt-dlp)...'
 Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile (Join-Path $Bin 'yt-dlp.exe')
@@ -63,4 +70,9 @@ if ($ok) {
 } else {
     Write-Host 'El descargador no respondio. Revise el archivo:' -ForegroundColor Red
     Write-Host (Join-Path $Destino 'descargador.log')
+}
+} catch {
+    Write-Host ''
+    Write-Host ('ERROR: ' + $_.Exception.Message) -ForegroundColor Red
+    Write-Host 'Revise su conexion a internet y vuelva a ejecutar el instalador.' -ForegroundColor Yellow
 }

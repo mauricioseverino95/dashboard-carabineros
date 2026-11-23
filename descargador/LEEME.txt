@@ -8,11 +8,11 @@ Que hace
   Carpeta: Descargas\Carabineros - Videos
 
 Instalacion (una sola vez, en cada PC que vaya a descargar)
-  1. Descomprima este ZIP en cualquier carpeta.
-  2. Doble clic en "Instalar descargador.bat".
+  1. Doble clic en "Instalar descargador.bat" (funciona aunque lo abra
+     directamente desde el ZIP; si puede, descomprimalo primero).
      Si Windows muestra "Windows protegio su PC": clic en "Mas informacion" > "Ejecutar de todas formas".
-  3. Espere a que diga LISTO (baja yt-dlp y ffmpeg, ~150 MB).
-  4. Recargue el dashboard. Si Chrome pregunta si el sitio puede acceder a
+  2. Espere a que diga LISTO (baja yt-dlp y ffmpeg, ~150 MB).
+  3. Recargue el dashboard. Si Chrome pregunta si el sitio puede acceder a
      aplicaciones de este equipo, elija "Permitir".
 
 Uso
