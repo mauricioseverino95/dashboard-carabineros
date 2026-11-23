@@ -342,3 +342,15 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .news-item.entra, .nw-nueva { animation: none; }
 }
+
+/* ---- Videos: vocerías primero y llegada en vivo ---- */
+.dl-item.entra { animation: nw-entra .9s cubic-bezier(.2,.8,.2,1) both, nw-brillo 1.8s ease-out both; }
+.dl-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.dl-tags .tag-cc { margin-bottom: 0; }
+.tag-voc {
+  display: inline-block; background: var(--verde); color: #fff; font: 700 10px var(--f-titulo);
+  letter-spacing: .05em; padding: 1px 6px; border-radius: 4px; text-transform: uppercase;
+}
+.dl-item.dl-voc { box-shadow: inset 3px 0 0 var(--oro); background: #FBF7E8; }
+.dl-sec-voc { background: var(--verde); color: #fff; border-bottom-color: var(--oro); }
+@media (prefers-reduced-motion: reduce) { .dl-item.entra { animation: none; } }
