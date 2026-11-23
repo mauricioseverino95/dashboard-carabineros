@@ -383,6 +383,94 @@ def resolve_cams():
     log("camaras:", [(i["id"], i["title"][:40]) for i in items])
     return items
 
+# ---------------------------------------------------------------- vocerías y cuñas
+# Búsquedas en YouTube de videos subidos HOY con declaraciones de Carabineros.
+VOC_BUSQUEDAS = [
+    "carabineros", "carabineros de chile", "carabineros noticias", "carabineros declaraciones",
+    "carabineros vocería", "general director carabineros", "carabineros detenidos", "carabineros operativo",
+]
+VOC_TERMINOS = ["vocer", "punto de prensa", "conferencia", "declarac", "declara ", "cuna", "entrevista",
+                "general ", "coronel", "teniente", "mayor ", "capitan", "comisario", "prefect", "jefe de zona",
+                "director general", "subdirector", "jefe de", "explica", "entrega detalles", "entrego detalles",
+                "informa", "balance", "dijo", "aseguro", "senalo", "afirmo", "habla", "palabras de"]
+
+
+def _rel_a_fecha(txt):
+    """'hace 5 h' / 'hace 3 horas' / '20 minutes ago' / 'Transmitido hace 2 d' -> datetime aproximado."""
+    t = norm(txt or "")
+    m = re.search(r"(\d+)\s*([a-z]+)", t.replace("hace", " "))
+    if not m:
+        return None
+    n, u = int(m.group(1)), m.group(2)
+    if u.startswith(("seg", "sec", "s")) and not u.startswith("sem"):
+        seg = 1
+    elif u.startswith("min") or u == "m":
+        seg = 60
+    elif u.startswith(("h", "hor")):
+        seg = 3600
+    elif u.startswith(("d", "dia", "day")):
+        seg = 86400
+    elif u.startswith(("sem", "w")):
+        seg = 604800
+    else:
+        return None
+    return NOW - dt.timedelta(seconds=n * seg)
+
+
+def buscar_vocerias(keywords):
+    found = {}
+    for q in VOC_BUSQUEDAS:
+        try:
+            # sp=EgIIAg== : filtro "Hoy"
+            url = ("https://www.youtube.com/results?search_query=" + urllib.parse.quote(q) +
+                   "&sp=EgIIAg%3D%3D&hl=es-419&gl=CL")
+            page = fetch(url, timeout=25).decode("utf-8", "ignore")
+        except Exception as e:  # noqa: BLE001
+            log("vocerias", q, "error", e)
+            continue
+        for m in re.finditer(r'"videoRenderer":\{"videoId":"([\w-]{11})"', page):
+            vid = m.group(1)
+            chunk = page[m.start():m.start() + 7000]
+            t = re.search(r'"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.){0,200})', chunk)
+            c = re.search(r'"ownerText":\{"runs":\[\{"text":"((?:[^"\\]|\\.){0,80})', chunk)
+            pt = re.search(r'"publishedTimeText":\{"simpleText":"([^"]{0,60})', chunk)
+            d = re.search(r'"snippetText":\{"runs":\[(.{0,600}?)\]', chunk)
+            title = _js_unescape(t.group(1)) if t else ""
+            desc = ""
+            if d:
+                desc = _js_unescape(" ".join(re.findall(r'"text":"((?:[^"\\]|\\.)*)"', d.group(1))))
+            if not title or not matches(title + " " + desc, keywords):
+                continue
+            fecha = _rel_a_fecha(pt.group(1) if pt else "")
+            if vid not in found:
+                found[vid] = {
+                    "videoId": vid, "title": title, "url": f"https://www.youtube.com/watch?v={vid}",
+                    "channel": _js_unescape(c.group(1)) if c else "", "channelKey": "yt",
+                    "published": fecha.isoformat() if fecha else None,
+                    "thumb": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+                    "description": clean(desc, 260), "hits": 0,
+                }
+            found[vid]["hits"] += 1
+    log("vocerias:", len(found))
+    return list(found.values())
+
+
+def clasificar_video(v, keywords):
+    """prioridad: 3 = vocería/cuña de Carabineros, 2 = relacionado con Carabineros, 0 = otro."""
+    txt = norm(v.get("title", "") + " " + v.get("description", ""))
+    carab = matches(txt, keywords)
+    voc = carab and any(w in txt for w in VOC_TERMINOS)
+    v["relevant"] = carab
+    v["voceria"] = voc
+    v["prioridad"] = 3 if voc else 2 if carab else 0
+    try:
+        fecha = dt.datetime.fromisoformat(v["published"]) if v.get("published") else None
+    except ValueError:
+        fecha = None
+    v["hoy"] = bool(fecha and (NOW - fecha) < dt.timedelta(hours=24))
+    return v
+
+
 # ---------------------------------------------------------------- principal
 def main():
     DATA.mkdir(exist_ok=True)
@@ -465,7 +553,35 @@ def main():
                 "id": item_id(v["title"]), "title": v["title"], "summary": v["description"],
                 "url": v["url"], "source": v["channel"], "kind": "tv", "published": v["published"],
             })
+    # --- Vocerías y cuñas de Carabineros subidas hoy a YouTube (búsqueda cada ~5 min)
+    voc_cache = DATA / "vocerias.json"
+    if _edad_min("vocerias.json") >= 4.5 or os.environ.get("FORZAR_VIVO"):
+        voc = _safe(buscar_vocerias, keywords)
+        try:
+            prev_voc = json.loads(voc_cache.read_text(encoding="utf-8")).get("items", [])
+        except (OSError, ValueError):
+            prev_voc = []
+        vistos = {v["videoId"] for v in voc}
+        for v in prev_voc:                           # conservar las de hoy ya encontradas
+            if v["videoId"] not in vistos and v.get("published") and \
+                    NOW - dt.datetime.fromisoformat(v["published"]) < dt.timedelta(hours=30):
+                voc.append(v)
+        write("vocerias.json", {"updated": NOW.isoformat(), "items": voc[:150]})
+    else:
+        try:
+            voc = json.loads(voc_cache.read_text(encoding="utf-8")).get("items", [])
+        except (OSError, ValueError):
+            voc = []
+    for v in voc:
+        if v.get("published"):
+            add({"id": item_id(v["title"]), "title": v["title"], "summary": v.get("description", ""),
+                 "url": v["url"], "source": v["channel"] or "YouTube", "kind": "tv", "published": v["published"]})
+    ids_tv = {v["videoId"] for v in tv}
+    tv.extend(v for v in voc if v["videoId"] not in ids_tv)
+    for v in tv:
+        clasificar_video(v, keywords)
     tv.sort(key=lambda v: v["published"] or "", reverse=True)
+    tv.sort(key=lambda v: (v["hoy"] and v["prioridad"]), reverse=True)   # estable: hoy+prioridad, luego fecha
 
     # --- Mantener historial anterior (para no perder notas que salen del RSS)
     try:
@@ -482,7 +598,7 @@ def main():
         build_map(results + map_results, items, keywords)
     except Exception as e:  # noqa: BLE001
         log("mapa error", e)
-    write("tv.json", {"updated": NOW.isoformat(), "items": tv[:120]})
+    write("tv.json", {"updated": NOW.isoformat(), "items": tv[:180]})
 
     # --- Señales en vivo: cada ~1 hora (si una se cae, el dashboard cambia solo a la de respaldo)
     if _edad_min("live.json") >= 59 or os.environ.get("FORZAR_VIVO"):
