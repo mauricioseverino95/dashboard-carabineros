@@ -670,12 +670,55 @@
   if (jobs.some(j => j.local && !["listo", "error"].includes(j.state))) vigilarLocal();
   if (local.activo) revisarLocal(true);
 
+  // Si el descargador de este PC aún no está instalado: guía de instalación y,
+  // apenas responde, se descarga solo el video que se pidió.
+  let guiaDlg = null, guiaPendiente = null;
+  function guiaInstalar(c, url) {
+    guiaPendiente = { c, url };
+    if (!guiaDlg) {
+      guiaDlg = el("dialog", { class: "dl-guia" },
+        el("div", { class: "dlg" },
+          el("h3", { text: "⬇ Falta un paso para descargar" }),
+          el("p", {}, "Los videos se descargan con ", el("b", { text: "yt-dlp" }), " en este computador (YouTube bloquea las descargas desde la nube). Instálelo una sola vez:"),
+          el("ol", {},
+            el("li", {}, el("a", { class: "btn btn-dl", href: ZIP_DESCARGADOR, text: "⬇ Descargar instalador (ZIP)" })),
+            el("li", {}, "Abra el ZIP y haga doble clic en ", el("b", { text: "«Instalar descargador.bat»" }), ". Si Windows avisa, elija ", el("b", { text: "Más información › Ejecutar de todas formas" }), "."),
+            el("li", {}, "Cuando diga ", el("b", { text: "LISTO" }), ", este video se descargará solo. Si Chrome pregunta por acceso a aplicaciones de este equipo, elija ", el("b", { text: "Permitir" }), ".")),
+          el("p", { class: "dl-guia-video" }),
+          el("p", { class: "dl-guia-estado", text: "⏳ Esperando al descargador de este PC…" }),
+          el("div", { class: "dlg-actions" },
+            el("button", { class: "btn btn-ghost", text: "Cerrar", onclick: () => guiaDlg.close() }))));
+      document.body.append(guiaDlg);
+    }
+    guiaDlg.querySelector(".dl-guia-video").textContent = "Video pendiente: " + (c.title || url);
+    try { guiaDlg.showModal(); } catch { guiaDlg.setAttribute("open", ""); }
+    esperarInstalacion();
+  }
+  let esperando = false;
+  async function esperarInstalacion() {
+    if (esperando) return; esperando = true;
+    const fin = Date.now() + 20 * 60 * 1000;
+    try {
+      while (guiaDlg && guiaDlg.open && Date.now() < fin) {
+        if (await revisarLocal(true)) {
+          guiaDlg.querySelector(".dl-guia-estado").textContent = "✅ Descargador conectado. Iniciando la descarga…";
+          await espera(900);
+          guiaDlg.close();
+          toast("✅ Descargador conectado.");
+          if (guiaPendiente) { const p = guiaPendiente; guiaPendiente = null; descargarLocal(p.c, p.url); }
+          return;
+        }
+        await espera(3000);
+      }
+    } finally { esperando = false; }
+  }
+
   async function descargar(c) {
     const url = c.source_url || c.url;
     const ya = clips.find(x => x.source_url === url || (vidOf(url) && x.videoId === vidOf(url)));
     if (ya) { return bajarArchivo(ya, null); }
     if (await revisarLocal(true)) return descargarLocal(c, url);
-    if (!token()) { irA("descargas"); toast("Para descargar, instale el descargador de este PC (pestaña Descargas)."); return; }
+    if (!token()) return guiaInstalar(c, url);
     if (jobs.some(j => j.url === url && !["listo", "error"].includes(j.state))) { toast("Ese video ya se está descargando."); return irA("descargas"); }
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const j = { id, url, title: c.title, channel: c.channel, thumb: c.thumb, state: "solicitando", pct: 5, msg: "Enviando solicitud…", t: Date.now() };
