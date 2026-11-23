@@ -1,0 +1,25 @@
+DESCARGADOR DE VIDEOS - Centro de Monitoreo de Medios, Carabineros de Chile
+============================================================================
+
+Que hace
+  Descarga en ESTE computador los videos (vocerias, cunas y notas de Carabineros)
+  que usted elige en el dashboard, usando yt-dlp (https://github.com/yt-dlp/yt-dlp),
+  y los deja comprimidos en MP4 480p, listos para WhatsApp.
+  Carpeta: Descargas\Carabineros - Videos
+
+Instalacion (una sola vez, en cada PC que vaya a descargar)
+  1. Descomprima este ZIP en cualquier carpeta.
+  2. Doble clic en "Instalar descargador.bat".
+     Si Windows muestra "Windows protegio su PC": clic en "Mas informacion" > "Ejecutar de todas formas".
+  3. Espere a que diga LISTO (baja yt-dlp y ffmpeg, ~150 MB).
+  4. Recargue el dashboard. Si Chrome pregunta si el sitio puede acceder a
+     aplicaciones de este equipo, elija "Permitir".
+
+Uso
+  En el dashboard: boton "Descargar" en cualquier video. El avance aparece en la
+  pestana "Descargas"; al terminar, "Abrir" muestra el archivo en la carpeta.
+  Opcional: active "Descargar automaticamente las vocerias del dia".
+
+Queda funcionando en segundo plano y se inicia solo con Windows.
+Solo acepta pedidos del dashboard oficial (no de otras paginas web).
+Para quitarlo: doble clic en "Desinstalar descargador.bat".
