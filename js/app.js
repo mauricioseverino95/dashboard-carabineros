@@ -717,8 +717,10 @@
     const url = c.source_url || c.url;
     const ya = clips.find(x => x.source_url === url || (vidOf(url) && x.videoId === vidOf(url)));
     if (ya) { return bajarArchivo(ya, null); }
+    // Siempre con yt-dlp en este PC; si no está instalado, guía de instalación (la descarga
+    // desde GitHub queda solo si se activa a propósito: YouTube la bloquea sin cookies).
     if (await revisarLocal(true)) return descargarLocal(c, url);
-    if (!token()) return guiaInstalar(c, url);
+    if (!token() || !store.get("dash.usarNube", false)) return guiaInstalar(c, url);
     if (jobs.some(j => j.url === url && !["listo", "error"].includes(j.state))) { toast("Ese video ya se está descargando."); return irA("descargas"); }
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const j = { id, url, title: c.title, channel: c.channel, thumb: c.thumb, state: "solicitando", pct: 5, msg: "Enviando solicitud…", t: Date.now() };
