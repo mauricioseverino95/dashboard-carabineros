@@ -712,6 +712,7 @@
       ));
   }
 
+  const videosVistos = new Set();   // para marcar y animar los videos que llegan en vivo
   function renderDL() {
     const list = $("#dl-list"), camsBox = $("#cams");
     const isCam = dlTab === "camaras";
@@ -721,13 +722,35 @@
       "Compartir copia el enlace · Descargar baja el video comprimido (MP4 480p) · Ver abre la fuente.";
     $("#dl-count").textContent = isCam ? cams.length : dlTab === "videos" ? tvItems.length : jobs.length + clips.length;
     if (isCam) { renderCams(); return; }
+    const scrollAntes = list.scrollTop;
     list.innerHTML = "";
     const frag = document.createDocumentFragment();
     if (dlTab === "videos") {
       const items = tvItems.filter(c => !dlQuery || norm(c.title + " " + c.channel).includes(dlQuery));
-      items.sort((a, b) => (b.relevant ? 1 : 0) - (a.relevant ? 1 : 0) || (b.published || "").localeCompare(a.published || ""));
+      // Prioridad: 1) vocerías/cuñas de Carabineros de hoy, 2) Carabineros hoy, 3) el resto; dentro, lo más reciente arriba
+      const grupo = c => c.hoy && c.voceria ? 0 : c.hoy && c.relevant ? 1 : c.relevant ? 2 : 3;
+      items.sort((a, b) => grupo(a) - grupo(b) || (b.published || "").localeCompare(a.published || ""));
       if (!items.length) list.append(el("li", { class: "empty", text: "Sin videos recientes." }));
-      items.slice(0, 150).forEach(c => frag.append(itemVideo(c, c.relevant ? el("span", { class: "tag-cc", text: "Carabineros" }) : null)));
+      const TIT = ["🎙 Vocerías y cuñas de Carabineros · hoy", "Carabineros · hoy", "Carabineros · días anteriores", "Otros videos recientes de los canales"];
+      const primera = !videosVistos.size;
+      let g0 = -1;
+      items.slice(0, 180).forEach(c => {
+        const g = grupo(c);
+        if (g !== g0) { frag.append(el("li", { class: "dl-sec" + (g === 0 ? " dl-sec-voc" : ""), text: TIT[g] })); g0 = g; }
+        const nuevo = !primera && !videosVistos.has(c.videoId);
+        const tags = el("div", { class: "dl-tags" },
+          nuevo ? el("span", { class: "nw-tag nw-nueva", text: "Nuevo" }) : null,
+          c.voceria ? el("span", { class: "tag-voc", text: "Vocería" }) : null,
+          c.relevant && !c.voceria ? el("span", { class: "tag-cc", text: "Carabineros" }) : null);
+        const li = itemVideo(c, tags.childNodes.length ? tags : null);
+        if (c.voceria && c.hoy) li.classList.add("dl-voc");
+        if (nuevo) li.classList.add("entra");
+        frag.append(li);
+      });
+      items.forEach(c => videosVistos.add(c.videoId));
+      list.append(frag);
+      list.scrollTop = scrollAntes;
+      return;
     } else {
       if (!jobs.length && !clips.length) list.append(el("li", { class: "empty", text: "Aún no hay descargas. Use «Descargar» en un video." }));
       if (jobs.length) frag.append(el("li", { class: "dl-sec", text: "En este equipo" }));
