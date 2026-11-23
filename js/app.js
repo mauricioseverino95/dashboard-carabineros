@@ -590,11 +590,92 @@
   const PASOS = { "Set up job": 15, "Run actions/checkout@v4": 20, "Run actions/setup-python@v5": 25, "Instalar herramientas": 35, "Descargar y comprimir clips": 70, "Guardar cambios": 85 };
   function setJob(j, patch) { Object.assign(j, patch); saveJobs(); if (dlTab === "descargas") renderDL(); updCount(); }
 
+  // ---- Descargador de este PC (yt-dlp + ffmpeg locales, ver carpeta descargador/)
+  // YouTube bloquea las descargas desde servidores en la nube; desde el PC del operador no.
+  const LOCAL = "http://localhost:8737";
+  const ZIP_DESCARGADOR = "https://github.com/" + REPO + "/raw/main/descargador/DescargadorCarabineros.zip";
+  const local = { ok: false, carpeta: "", ytdlp: "", visto: 0, activo: store.get("dash.local", false) };
+  const espera = ms => new Promise(r => setTimeout(r, ms));
+  async function revisarLocal(forzar) {
+    if (!forzar && Date.now() - local.visto < 20000) return local.ok;
+    local.visto = Date.now();
+    const antes = local.ok;
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2000);
+      const d = await (await fetch(LOCAL + "/ping", { signal: ctl.signal, cache: "no-store" })).json();
+      clearTimeout(t);
+      local.ok = !!d.ok; local.carpeta = d.carpeta || ""; local.ytdlp = d.ytdlp || "";
+    } catch { local.ok = false; }
+    if (local.ok && !local.activo) { local.activo = true; store.set("dash.local", true); }
+    if (antes !== local.ok && dlTab === "descargas") renderDL();
+    return local.ok;
+  }
+  async function descargarLocal(c, url, silencioso) {
+    try {
+      const r = await fetch(LOCAL + "/descargar", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, title: c.title || "", channel: c.channel || "", published: c.published || "", ref: c.videoId || "" }) });
+      const d = await r.json();
+      if (!r.ok || !d.id) throw new Error(d.error || r.status);
+      if (!jobs.some(j => j.localId === d.id)) {
+        jobs.unshift({ id: "L" + d.id, localId: d.id, local: true, url, title: c.title, channel: c.channel, thumb: c.thumb,
+          state: "en cola", pct: 3, msg: "En cola en este PC…", t: Date.now() });
+        saveJobs();
+      }
+      if (!silencioso) { irA("descargas"); toast(d.repetido ? "Ese video ya está descargado o en curso." : "⬇ Descargando en este PC…"); }
+      renderDL(); updCount(); vigilarLocal();
+      return true;
+    } catch (e) {
+      if (!silencioso) toast("El descargador de este PC no respondió. ¿Está instalado y encendido?");
+      return false;
+    }
+  }
+  let vigilandoLocal = false;
+  async function vigilarLocal() {
+    if (vigilandoLocal) return; vigilandoLocal = true;
+    let fallos = 0;
+    try {
+      while (jobs.some(j => j.local && !["listo", "error"].includes(j.state))) {
+        await espera(2000);
+        try {
+          const d = await (await fetch(LOCAL + "/estado", { cache: "no-store" })).json();
+          fallos = 0;
+          let cambio = false;
+          for (const t of d.trabajos || []) {
+            const j = jobs.find(x => x.localId === t.id); if (!j) continue;
+            const state = t.estado === "listo" ? "listo" : t.estado === "error" ? "error" : "procesando";
+            const msg = t.estado === "listo" ? "Guardado en " + (t.nombre || "la carpeta") + " · " + [dur(t.duracion), mb(t.tam)].filter(Boolean).join(" · ") : t.msg;
+            if (j.state !== state || j.pct !== t.pct || j.msg !== msg) { Object.assign(j, { state, pct: t.pct, msg, file: t.nombre, size: t.tam }); cambio = true; }
+          }
+          if (cambio) { saveJobs(); if (dlTab === "descargas") renderDL(); updCount(); }
+        } catch {
+          if (++fallos >= 30) {
+            jobs.filter(j => j.local && !["listo", "error"].includes(j.state)).forEach(j => Object.assign(j, { state: "error", msg: "El descargador de este PC dejó de responder." }));
+            saveJobs(); renderDL(); break;
+          }
+        }
+      }
+    } finally { vigilandoLocal = false; }
+  }
+  function abrirLocal(j) { fetch(LOCAL + "/abrir?id=" + encodeURIComponent(j.localId)).catch(() => toast("El descargador de este PC no respondió.")); }
+  // Vocerías del día: descarga automática opcional en este PC
+  async function autoVocerias() {
+    if (!store.get("dash.autovoc", false) || !local.activo || !(await revisarLocal())) return;
+    const hechas = new Set(store.get("dash.autovoc.hechas", []));
+    const nuevas = tvItems.filter(c => c.voceria && c.hoy && c.videoId && !hechas.has(c.videoId)).slice(0, 3);
+    for (const c of nuevas) {
+      if (await descargarLocal(c, c.url, true)) hechas.add(c.videoId);
+    }
+    if (nuevas.length) { store.set("dash.autovoc.hechas", [...hechas].slice(-300)); toast("⬇ " + nuevas.length + " vocería(s) nueva(s) descargándose en este PC."); }
+  }
+  if (jobs.some(j => j.local && !["listo", "error"].includes(j.state))) vigilarLocal();
+  if (local.activo) revisarLocal(true);
+
   async function descargar(c) {
     const url = c.source_url || c.url;
     const ya = clips.find(x => x.source_url === url || (vidOf(url) && x.videoId === vidOf(url)));
     if (ya) { return bajarArchivo(ya, null); }
-    if (!token()) return abrirConfig("Para descargar, primero active las descargas en este equipo.");
+    if (await revisarLocal(true)) return descargarLocal(c, url);
+    if (!token()) { irA("descargas"); toast("Para descargar, instale el descargador de este PC (pestaña Descargas)."); return; }
     if (jobs.some(j => j.url === url && !["listo", "error"].includes(j.state))) { toast("Ese video ya se está descargando."); return irA("descargas"); }
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const j = { id, url, title: c.title, channel: c.channel, thumb: c.thumb, state: "solicitando", pct: 5, msg: "Enviando solicitud…", t: Date.now() };
@@ -712,6 +793,26 @@
       ));
   }
 
+  function bannerLocal() {
+    if (local.ok) {
+      const auto = el("input", { type: "checkbox" });
+      auto.checked = store.get("dash.autovoc", false);
+      auto.addEventListener("change", () => { store.set("dash.autovoc", auto.checked); if (auto.checked) { toast("Las vocerías del día se descargarán solas en este PC."); autoVocerias(); } });
+      return el("li", { class: "dl-local ok" },
+        el("div", { class: "dl-local-t" }, el("span", { class: "live-dot" }), "Descargador de este PC conectado",
+          el("small", { text: local.ytdlp ? " · yt-dlp " + local.ytdlp : "" })),
+        el("div", { class: "dl-local-c", title: local.carpeta, text: "Carpeta: " + local.carpeta }),
+        el("div", { class: "dl-actions" },
+          el("button", { class: "btn btn-ghost", text: "📂 Abrir carpeta", onclick: () => fetch(LOCAL + "/carpeta").catch(() => { }) })),
+        el("label", { class: "dl-auto" }, auto, " Descargar automáticamente las vocerías del día"));
+    }
+    return el("li", { class: "dl-local" },
+      el("div", { class: "dl-local-t", text: "⬇ Descargas con yt-dlp en este PC" }),
+      el("p", { text: "YouTube bloquea las descargas desde servidores en la nube. Instale el descargador una vez en este computador (Windows) y los videos se guardarán comprimidos para WhatsApp en Descargas › Carabineros - Videos." }),
+      el("div", { class: "dl-actions" },
+        el("a", { class: "btn btn-dl", href: ZIP_DESCARGADOR, text: "⬇ Instalar descargador" }),
+        el("button", { class: "btn btn-ghost", text: "↻ Ya lo instalé: conectar", onclick: async () => { toast((await revisarLocal(true)) ? "✅ Descargador conectado." : "No se encontró el descargador en este PC. ¿Terminó la instalación?"); renderDL(); } })));
+  }
   const videosVistos = new Set();   // para marcar y animar los videos que llegan en vivo
   function renderDL() {
     const list = $("#dl-list"), camsBox = $("#cams");
@@ -752,7 +853,8 @@
       list.scrollTop = scrollAntes;
       return;
     } else {
-      if (!jobs.length && !clips.length) list.append(el("li", { class: "empty", text: "Aún no hay descargas. Use «Descargar» en un video." }));
+      frag.append(bannerLocal());
+      if (!jobs.length && !clips.length) frag.append(el("li", { class: "empty", text: "Aún no hay descargas. Use «Descargar» en un video." }));
       if (jobs.length) frag.append(el("li", { class: "dl-sec", text: "En este equipo" }));
       jobs.forEach(j => {
         const fin = j.state === "listo", err = j.state === "error";
@@ -761,7 +863,8 @@
           el("div", { class: "dl-actions" },
             el("button", { class: "btn btn-share", text: "🔗", title: "Copiar enlace de la noticia", onclick: () => copiar(j) }),
             el("a", { class: "btn btn-ghost", href: j.url, target: "_blank", rel: "noopener", text: "▶", title: "Ver la fuente" }),
-            fin ? el("button", { class: "btn btn-dl", text: "💾 Guardar otra vez", onclick: () => bajarArchivo({ file: j.file, size: j.size, duration: j.duration, download_url: j.download_url }, null) }) : null,
+            fin && j.local ? el("button", { class: "btn btn-dl", text: "📂 Abrir", title: "Mostrar el archivo en la carpeta", onclick: () => abrirLocal(j) }) : null,
+            fin && !j.local ? el("button", { class: "btn btn-dl", text: "💾 Guardar otra vez", onclick: () => bajarArchivo({ file: j.file, size: j.size, duration: j.duration, download_url: j.download_url }, null) }) : null,
             err ? el("button", { class: "btn btn-dl", text: "↻ Reintentar", onclick: () => { jobs = jobs.filter(x => x !== j); saveJobs(); descargar(j); } }) : null,
             (fin || err) ? el("button", { class: "btn btn-ghost", text: "✕", title: "Quitar de la lista", onclick: () => { jobs = jobs.filter(x => x !== j); saveJobs(); renderDL(); } }) : null));
         frag.append(el("li", { class: "dl-item" },
@@ -833,6 +936,7 @@
         camState.slots.forEach(sl => { if (sl.cam && !cams.some(c => c.id === sl.cam.id)) replaceCam(sl); });
       }
     } catch { }
+    if (local.activo) { await revisarLocal(); autoVocerias(); }
     if (dlTab !== "camaras" || !camState.slots.length) renderDL();
     updCount();
   }
